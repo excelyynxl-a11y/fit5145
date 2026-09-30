@@ -14,13 +14,36 @@ library(tidyverse)
 
 ### Load HYROX.csv
 
+Load hyrox_results/csv downloaded from <https://github.com/imterence/hyrox_analysis>. The dataset is HYROX Open Male category of season 25-26 result, as it captures significant high first-timer participation.
+
+Information of the dataset: 
+- `Rank`: Athlete's ranking 
+- `Name`: Athlete's name 
+- `City`: Race location 
+- `Total_Time`: Total race time
+- `athlete_url`: Athlete's profile URL
+- `Age_Group`: Athlete's age group 
+- `Division`: Race division: HYROX = Open category
+- `Rank_MW`: Gender group ranking
+- `Rank_AG`: Age group ranking
+- `Running_1`, `Running_2`, `Running_3`, `Running_4`, `Running_5`, `Running_6`, `Running_7`, `Running_8`: Individual run times 
+- `SkiErg_1000m`: 1000m SkiErg time 
+- `Sled_Push_50m`: 50m Sled Push time 
+- `Sled_Pull_50m`: 50m Sled Pull time 
+- `Burpee_Broad_Jump_80m`: 80m Burpee Broad Jump time 
+- `Row_1000m`: 1000m Row time 
+- `Farmers_Carry_200m`: 200m Farmers Carry time 
+- `Sandbag_Lunges_100m`: 100m Sandbag Lunges time 
+- `Wall_Balls`: Wall Balls time
+- `Roxzone Time`: Total transition time between running and functional stations
+
 ```{R}
 hyrox <- read_csv("data/hyrox_results.csv")
 
-hyrox
+hyrox %>% head(10)
 ```
 
-## 
+### Dataset cleaning
 
 ```{R}
 
