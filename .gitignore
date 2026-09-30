@@ -1,3 +1,13 @@
+# Ignore all R Project files (including the main file)
+*.Rproj
+
+# Ignore all user-specific R project metadata
+.Rproj.user/
+
+# Ignore data folders
+*data/
+*Data/
+
 # History files
 .Rhistory
 .Rapp.history
