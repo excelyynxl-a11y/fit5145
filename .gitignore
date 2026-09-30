@@ -18,3 +18,8 @@
 
 # User-specific project settings (The main metadata culprit)
 .Rproj.user/
+
+# ass4 specific files
+consumer_complaints.zip
+property_transaction_victoria.zip
+Task_C_Datasets.zip
