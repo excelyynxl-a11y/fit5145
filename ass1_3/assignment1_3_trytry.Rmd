@@ -1,0 +1,51 @@
+---
+title: "assignment1_3_trytrydulu"
+output: pdf_document
+date: "2026-08-26"
+---
+
+# FIT5145 Assignment 1 & 3: Data-Driven Pacing Corridor for First-Timer Hyrox Athletes
+
+### Load tidyverse
+
+```{R}
+library(tidyverse)
+```
+
+### Load HYROX.csv
+
+```{R}
+hyrox <- read_csv("data/hyrox_results.csv")
+
+hyrox
+```
+
+## 
+
+```{R}
+
+```
+
+## 
+
+```{R}
+
+```
+
+## 
+
+```{R}
+
+```
+
+## 
+
+```{R}
+
+```
+
+## 
+
+```{R}
+
+```
