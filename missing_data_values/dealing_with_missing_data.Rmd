@@ -1,0 +1,142 @@
+---
+title: "missing_values"
+output: html_document
+date: "2026-08-24"
+---
+
+# Load session
+
+```{R}
+library(naniar)
+library(tidyverse)
+
+tao_shadow <- bind_shadow(oceanbuoys)
+
+tao_shadow
+
+tao_shadow <- tao_shadow %>%
+  impute_mean_at(vars(sea_temp_c, air_temp_c))
+
+ggplot(tao_shadow, 
+       aes(x = sea_temp_c,
+           y = air_temp_c,
+           colour = air_temp_c_NA)) +
+  geom_point(alpha = 0.5) +
+  facet_wrap(~year) + 
+  scale_color_brewer(palette = "Dark2")
+
+```
+
+```{R}
+tao_shadow <- bind_shadow(oceanbuoys)
+
+tao_shadow <- tao_shadow %>%
+  group_by(year) %>% 
+  impute_mean_at(vars(sea_temp_c, air_temp_c)) %>%
+  ungroup()
+
+ggplot(tao_shadow,
+       aes(x = sea_temp_c,
+           y = air_temp_c,
+           colour = air_temp_c_NA)) + 
+  geom_point(alpha = 0.5) + 
+  facet_wrap(~year) +
+  scale_color_brewer(palette = "Dark2")
+
+```
+
+# Nearest neighbours imputation
+
+# Installation
+
+```{R}
+if (!requireNamespace("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+BiocManager::install("impute", version = "3.16")
+```
+
+# Impute the nearest neighbours
+
+```{R}
+library(impute)
+
+tao_impute <- bind_shadow(oceanbuoys) %>%
+  arrange(year, sea_temp_c, air_temp_c) %>%
+  select(sea_temp_c, air_temp_c)
+
+tao_impute <- impute.knn(as.matrix(tao_impute), 5)
+
+tao_shadow <- bind_shadow(oceanbuoys) %>%
+  arrange(year, sea_temp_c, air_temp_c) %>%
+  mutate(sea_temp_c = tao_impute$data[,1],
+         air_temp_c = tao_impute$data[,2])
+
+ggplot(tao_shadow,
+       aes(x = sea_temp_c,
+           y = air_temp_c,
+           colour = air_temp_c_NA)) +
+  geom_point(alpha = 0.7) + 
+  facet_wrap(~year) + 
+  scale_color_brewer(palette = "Dark2") + 
+  theme(aspect.ratio = 1)
+```
+
+# Impute by year
+
+```{R}
+library(impute)
+
+tao_impute_93 <- bind_shadow(oceanbuoys) %>%
+  arrange(year, sea_temp_c, air_temp_c) %>%
+  filter(year=="1993") %>%
+  select(sea_temp_c, air_temp_c) 
+
+tao_impute_93 <- impute.knn(as.matrix(tao_impute_93), 5)
+
+tao_impute_97 <- bind_shadow(oceanbuoys) %>%
+  arrange(year, sea_temp_c, air_temp_c) %>%
+  filter(year=="1997") %>%
+  select(sea_temp_c, air_temp_c)
+
+tao_impute_97 <- impute.knn(as.matrix(tao_impute_97), 5)
+
+tao_impute <- rbind(tao_impute_93$data, tao_impute_97$data)
+
+tao_shadow <- bind_shadow(oceanbuoys) %>%
+  arrange(year, sea_temp_c, air_temp_c) %>%
+  mutate(sea_temp_c = tao_impute[,1],
+         air_temp_c = tao_impute[,2])
+
+ggplot(tao_shadow,
+       aes(x = sea_temp_c,
+           y = air_temp_c, 
+           colour=air_temp_c_NA)) +
+  geom_point(alpha=0.5) + 
+  facet_wrap(~year) +
+  scale_colour_brewer(palette="Dark2") +
+  theme(aspect.ratio=1)
+```
+
+```{R}
+
+```
+
+```{R}
+
+```
+
+```{R}
+
+```
+
+```{R}
+
+```
+
+```{R}
+
+```
+
+```{R}
+
+```

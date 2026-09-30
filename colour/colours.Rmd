@@ -1,0 +1,133 @@
+---
+title: "tb_colours"
+output: html_document
+---
+
+Load tidyverse
+```{R}
+library(tidyverse)
+```
+
+Import tb data
+```{R}
+tb <- read_rds("data/tb_tidy.rds")
+
+tb
+```
+
+Cloropleth map 
+```{R}
+# compute relative diff between 2021 and 2002 
+tb_inc <- tb %>%
+  filter(year %in% c(2002, 2012)) %>% 
+  group_by(country, year) %>%
+  summarise(count = sum(count, na.rm = TRUE)) %>%
+  spread(year, count) %>%
+  mutate(reldif = ifelse(`2002` == 0, 0, (`2012` - `2002`)/(`2002`))) %>%
+  ungroup()
+# ifelse above means 'if country has 0 cases in year 2002, reldif = 0, else compute reldif using formula (2012-2002)/(2002)
+
+tb_inc
+  
+
+```
+
+Join with a world map
+```{R}
+
+# load maps
+library(maps)
+library(ggthemes)
+world_map <- map_data("world")
+
+# names of countries to the same in both data tables
+tb_inc <- tb_inc %>%
+  mutate(
+    country = recode(
+      country,
+      "United States of America"="USA",            "United Kingdom of Great Britain and Northern Irelan
+d"="UK","Russian Federation"="Russia"
+    ))
+
+tb_map <- left_join(world_map, tb_inc, by=c("region" = "country"))
+
+head(tb_map)
+```
+
+Sequential: Draw a map with sequential palette
+```{R}
+ggplot(tb_map) +
+  geom_polygon(aes(x = long, y = lat, group = group, fill = reldif)) + theme_map()
+```
+
+
+Modify colour palette of map
+```{R}
+
+# load viridis
+library(viridis)
+
+# plot map with color palette
+ggplot(tb_map) + geom_polygon(aes(x = long, y = lat, group = group, fill = reldif)) + theme_map() + scale_fill_viridis(na.value = "white")
+```
+
+Diverging palette
+```{R}
+ggplot(tb_map) + geom_polygon(aes(x = long, y = lat, group = group, fill = reldif)) + theme_map() + scale_fill_distiller(palette = "PRGn", na.value = "white", limits = c(-7, 7))
+```
+
+Qualitative:  highlight each country by their continent using a qualitative palette as continents is a categorical variable
+```{R}
+# load country_continent
+country_continent <- read_csv("https://raw.githubusercontent.com/datascienceprogram/ids_course_data/master/country_continent.csv")
+
+country_continent
+
+# data preprocessing
+country_continent <- country_continent %>%
+  select(Continent_Name, Country_Name)
+country_continent
+
+countryName <- country_continent$Country_Name
+
+# remove characters after (,)
+country_continent$Country_Name <- gsub("\\,.*", "", countryName) 
+country_continent
+
+# rename countries for consistency
+country_continent <- country_continent %>%
+  mutate(country = recode(
+    Country_Name,
+    "United States of America"="USA",
+    "United Kingdom of Great Britain and Northern Ireland"="UK",
+    "Russian Federation"="Russia"
+    ))
+
+# map of countries highlighted by continent
+tb_map %>%
+  left_join(country_continent, by=c("region" = "country")) %>% 
+  ggplot() + geom_polygon(aes(x = long, y = lat, group = group, fill = Continent_Name)) + theme_map() + scale_fill_brewer(palette = "Dark2", na.value = "white")
+```
+
+Color blindness colour palette (scales library)
+```{R}
+# load scales packages
+library(scales)
+
+# create fake data
+df <- data.frame(x = runif(100), y = runif(100), cl = sample(c(rep("A", 50), rep("B", 50))))
+
+p <- ggplot(data = df, aes(x, y, colour = cl)) + theme_bw() + geom_point() + theme(legend.position = "none", aspect.ratio = 1)
+
+p
+```
+
+Color blindness colour palette (dichromat library)
+```{R}
+# load dichromat
+library(dichromat)
+
+clrs <- dichromat(hue_pal()(3))
+p + scale_colour_manual("", values = clrs)
+```
+

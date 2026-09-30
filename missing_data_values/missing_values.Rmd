@@ -1,0 +1,62 @@
+---
+title: "missing_value"
+output: html_document
+date: "2026-08-24"
+---
+
+# Load
+
+```{R}
+library(tidyverse)
+
+tb_au <- read_rds("data/tb_tidy.rds")
+
+tb_au %>% filter(country == "Australia")
+```
+
+# Heatmap
+
+```{R}
+library(visdat)
+
+vis_dat(tb_au)
+```
+
+# Load
+
+```{R}
+library(naniar)
+
+glimpse(oceanbuoys)
+```
+
+# Missingness mapping
+
+```{R}
+vis_miss(oceanbuoys, sort_miss = TRUE)
+```
+
+# Missingness summaries
+
+```{R}
+# Numerical summary measures of missing data 
+s_miss <- miss_summary(oceanbuoys)
+s_miss
+
+# Proportion of missing data 
+s_miss$miss_df_prop
+
+# Proportion of variables missing 
+s_miss$miss_var_prop
+
+# Print data in variable miss_case_table
+s_miss$miss_case_table
+
+# Obtain missingness summary tables grouped by year 
+s_miss_year <- oceanbuoys %>%
+  group_by(year) %>%
+  miss_summary() %>% 
+  ungroup()
+
+s_miss_year$miss_case_table
+```

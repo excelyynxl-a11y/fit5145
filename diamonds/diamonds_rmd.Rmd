@@ -1,0 +1,16 @@
+---
+title: "diamonds"
+output: html_document
+date: "2026-07-25"
+---
+
+```{r}
+library(tidyverse)
+smaller <- filter(diamonds, carat <= 2.5)
+smaller
+```
+
+[RStudio Cheatsheet](https://www.rstudio.com/resources/cheatsheets/)
+
+![Image postcade from Melb](https://ugc.futurelearn.com/uploads/assets/2a/22/2a22717f-0a39-49ad-8438-f5ceea0e3c18.jpg "Image of postcard of Melbourne.")
+‘Collins Street, Looking East, Melbourne’ [Image] National Museum of Australia Retrieved from http://collectionsearch.nma.gov.au/object/720

@@ -1,0 +1,284 @@
+---
+title: "pisa"
+output: html_document
+date: "2026-09-29"
+---
+
+# PISA
+
+## Data wrangling and cleaning
+
+```{R}
+load("data/pisa_au.rda")
+library(tidyverse)
+```
+
+```{R}
+pisa_au_science <- pisa_au %>% 
+  mutate(science = (PV1SCIE + PV2SCIE + PV3SCIE + PV4SCIE + PV5SCIE + PV6SCIE + PV7SCIE + PV8SCIE + PV9SCIE + PV10SCIE) / 10) %>% 
+  select(science, science_fun = ST094Q01NA, science_time = SMINS, stuweight = W_FSTUWT, gender=ST004D01T, anxtest = ANXTEST) %>%
+  mutate(gender = factor(
+    gender, 
+    levels=c(1,2),
+    labels=c("girl", "boy")
+  ), exclude = NULL) %>% 
+  filter(!is.na(science_fun), !is.na(science_time)) %>% 
+  mutate(
+    science_fun = as.factor(science_fun),
+    science_time = as.numeric(science_time)
+  ) %>%
+  filter(science_time > 0)
+
+pisa_au_science %>% head()
+```
+
+## Wrangling challenge
+
+```{R}
+pisa_au %>%
+  mutate(
+    science = rowMeans(select_at(., vars(starts_with("PV") & ends_with("SCIE"))))
+  ) %>%
+  select(science, everything())
+```
+
+## Relationship score & time spend studying
+
+Develop a linear regression model of science score to understand how the independent variables effect a student’s science score.
+
+```{R}
+pisa_au_science %>%
+  ggplot(aes(x = science_time, y = science)) +
+  geom_point()
+```
+
+Observation:
+
+- There are outliers (some student spent large proportion of their time studying science each week)
+
+- These outliers stand out in the scatter plot, stretching the x-axis range to accommodate for these large values.
+
+- Difficult to visualise the relationship between a student's student score and the amount of time they spend studying science each week
+
+```{R}
+pisa_au_science %>%
+  ggplot(aes(x = science_time)) +
+  geom_density()
+```
+
+Observation:
+
+- Time spend studying science is highly positively skewed
+
+## Log transformation
+
+Applying a log transformation on a numerical variable (cannot take the log of variable that contains zeros or negative values) will scale back any large numbers.
+
+```{R}
+dens_sci_time <- pisa_au_science %>%
+  ggplot(aes(x = science_time)) +
+  geom_density() +
+  geom_histogram(aes(y = ..density..), alpha = 0.5) +
+  labs(title = "Distribution of time spent studying science **before** log transformation")
+
+dens_log_sci_time <- pisa_au_science %>%
+  ggplot(aes(x = science_time)) +
+  geom_density() +
+  geom_histogram(aes(y = ..density..), alpha = 0.5) +
+  scale_x_log10() +
+  labs(title = "Distribution of time spent studying science **after** log transformation")
+
+gridExtra::grid.arrange(dens_sci_time, dens_log_sci_time, nrow = 2)
+```
+
+What was layered into the ggplot call to apply a log transformation to time spent studying science (the x-axis log-scaled)?
+
+- x-axis is log-scaled by layering the function **`scale_x_log10()`** onto the **`ggplot`** call i.e. a log transformation on the time spent studying science per week (minutes) is applied, which is done to create a more meaningful plot
+
+Describe the difference in the distribution of time spent studying science before and after the log transformation.
+
+- Positively skewed to normally distributed
+
+What should we expect to see when we produce a scatter plot of science score against the log of time spent studying science?
+
+- Scatter plot will be more interpretable and a relationship between science score and the log of time spent studying will be clear
+
+```{R}
+pisa_au_science %>%
+  ggplot(aes(x = science_time, y = science)) +
+  geom_point(alpha = 0.1) +
+  scale_x_log10() +
+  labs(
+    title = "Relationship between science score and time spent studying it",
+    caption = "*x-axis is plotted on a log scale",
+    x = "Time spent studying science per week*",
+    y = "Science score"
+  )
+```
+
+## Controlling for science enjoyment
+
+```{R}
+pisa_au_science %>%
+  ggplot(aes(x = science_time, y = science, colour = science_fun)) +
+  geom_point(alpha = 0.1) +
+  facet_wrap(~ science_fun, ncol = 2) +
+  scale_color_brewer("Enjoy science", palette = "Dark2") +
+  scale_x_log10() +
+  theme(legend.position = "bottom") + 
+  ggtitle("Relationship between science score and time spent studying it") +
+  labs(
+    subtitle = "Students are grouped based on how much they enjoy science",
+    caption = "*x-axis is plotted on a log scale"
+  ) +
+  xlab("Time spent studying science per week*") + 
+  ylab("Science score")
+```
+
+If you did not apply a log transformation to study time, how would you describe its distribution?
+
+- Heavily positively skewed
+
+Based on the log scaled x-axis, how would you describe the relationship between science score and time spent studying?
+
+- Weak
+
+Are students who enjoy science more likely to receive higher scores, given they spend an equal amount of time studying science?
+
+- Yes
+
+```{R}
+pisa_au_science %>%
+  ggplot(aes(x = science_time, y = science, colour = science_fun)) +
+  geom_point(alpha = 0.1) +
+  facet_wrap(~ science_fun, ncol = 2) +
+  scale_color_brewer("Enjoy science", palette = "Dark2") +
+  theme(legend.position = "bottom") + 
+  ggtitle("Relationship between science score and time spent studying it") +
+  labs(
+    subtitle = "Students are grouped based on how much they enjoy science",
+    caption = "*x-axis is plotted on a normal scale"
+  ) +
+  xlab("Time spent studying science per week*") + 
+  ylab("Science score")
+```
+
+## Modelling science score and training the model
+
+```{R}
+mod1 <- lm(
+  science ~ log10(science_time) + science_fun,
+  data = pisa_au_science, 
+  weights = stuweight
+)
+mod1
+```
+
+```{R}
+mod2 <- lm(
+  science ~ log10(science_time) * science_fun,
+  data = pisa_au_science,
+  weights = stuweight
+)
+mod2
+```
+
+```{R}
+library(broom)
+```
+
+```{R}
+# output of first fitted model
+tidy(mod1)
+```
+
+```{R}
+# intercept coefficient at that point is the regression coefficient 
+# from glance(), we can get R^2
+glance(mod1)
+```
+
+```{R}
+# output of second fitted model
+tidy(mod2)
+
+```
+
+```{R}
+# intercept coefficient at that point is the regression coefficient 
+# from glance(), we can get R^2
+glance(mod2)
+```
+
+Provide an interpretation of the intercept coefficients for both fitted models. Write down each fitted model in equation form.
+
+- mod1: 268 + 83.8 \* log10(science_time) + 31.8 \* science_fun2 + 63.1 \* science_fun4 + 104 \* science_fun4
+
+- R\^2 for mod1 = 0.1232009
+
+- mod2: 463 - 0.00400 \* log10(science_time) - 152 \* science_fun2 - 167 \* science_fun3 - 122 \* science_fun4 + 78.6 \* log10(science_time)*science_fun2 + 98.4* log10(science_time)*science_fun3 +\
+  96.9* log10(science_time)\*science_fun4
+
+- R\^2 for mod2 = 0.125131
+
+Which model is better, and why?
+
+## How does science score relate to text anxiety and gender?
+
+```{R}
+pisa_au_science %>% 
+  ggplot(aes(x = anxtest, y = science, colour = as.factor(gender))) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(method = "lm") +
+  theme(legend.position = "bottom") + 
+  ggtitle("Relationship between science score and anxiety level") +
+  labs(colour = "Gender") +
+  xlab("Anxiety level") + 
+  ylab("Science score")
+```
+
+Number of missing values = 25
+
+Observation:
+
+- According to this data, girls are more anxious than boys.
+
+- Therefore, the model will have to account for this differing bias between the genders if it wants to model the overall relationship between the science score vs anxiety level.
+
+## Which is a better model?
+
+Fit two models of science score using information about the student’s gender and anxiety level:
+
+1.  A model of science score against gender and test anxiety level.
+2.  A model of science score with an interaction between gender and test anxiety level
+
+```{R}
+# science score against gender and test anxiety level
+sci_lm1 <- lm(
+  science ~ anxtest + gender,
+  data = pisa_au_science,
+  weights = stuweight
+)
+tidy(sci_lm1)
+```
+
+```{R}
+# glance() to get R^2
+glance(sci_lm1)
+```
+
+```{R}
+# science score with an interaction between gender and test anxiety level
+sci_lm2 <- lm(
+  science ~ anxtest * gender,
+  data = pisa_au_science,
+  weight = stuweight
+)
+
+tidy(sci_lm2)
+```
+
+```{R}
+# glance() to get R^2
+glance(sci_lm2)
+```

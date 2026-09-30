@@ -1,0 +1,189 @@
+---
+title: "melb_walk_wide"
+output: html_document
+---
+
+## Load tidyverse
+```{R}
+library(tidyverse)
+```
+
+## Read melb_walk.csv 
+```{R}
+ped_wide <- read_csv("data/melb_walk_wide.csv")
+```
+
+## Print ped_wide
+```{R}
+ped_wide
+```
+
+## First and last date in the data
+```{R}
+ped_wide %>%
+  arrange(Date) %>%
+  summarise(
+    first_date = first(Date),
+    last_date = last(Date)
+  )
+```
+
+## Convert to long form
+```{R}
+ped <- ped_wide %>%
+  gather(key = Sensor, value = Count, -Date_Time, -Date, -Time ) %>%
+  select(Sensor, everything(), Count)
+
+ped
+```
+
+##  State Library on the 1st of January, 2019.
+```{R}
+# Filter for State Library data on Jan 1, 2019 
+state_lib_jan_one <- ped %>%
+  filter(Date == "2019-01-01", Sensor == "State Library")
+
+state_lib_jan_one
+```
+
+## Values from state_lib_jan_one
+```{R}
+# number of columns 
+no_col <- ncol(state_lib_jan_one)
+no_col
+
+# number of row 
+no_row <- nrow(state_lib_jan_one)
+no_row 
+
+# hour with highest pedestrian count
+hour_highest_ped_count <- state_lib_jan_one %>%
+  arrange(desc(Count)) %>%
+  slice(1) %>% 
+  select(everything())
+hour_highest_ped_count
+```
+
+## Line plot of State Library pedestrian count
+```{R}
+state_lin_jan_one_line_plot <- state_lib_jan_one %>%
+  ggplot(aes(x = Time, y = Count)) + geom_line()
+
+state_lin_jan_one_line_plot
+```
+
+## Bar plot of count
+```{R}
+state_lib_jan_one_bar_plot <- state_lib_jan_one %>% ggplot(aes(x = Time, y = Count)) + geom_bar(stat = "identity")
+
+state_lib_jan_one_bar_plot
+```
+
+## Side-by-side box plot
+```{R}
+# Filter for State Library
+state_lib <- ped %>%
+  filter(Sensor == "State Library")
+
+state_lib
+
+# Side-by-side box plot of pedestrian count for each hour of the day 
+state_lib_side_by_side_box <- state_lib %>% ggplot(aes(x = Time, y = Count, group = Time)) + geom_boxplot()
+
+state_lib_side_by_side_box
+
+# Without time (one big box plot)
+state_lib_box_plot <- state_lib %>% 
+  ggplot(aes(x = Time, y = Count)) + geom_boxplot()
+
+state_lib_box_plot
+```
+
+## Filter for multiple sensors
+```{R}
+# Filter for the Melbourne Central and State Library sensors
+mc_sl <- ped %>%
+  filter(Sensor %in% c("Melbourne Central", "State Library"))
+
+mc_sl
+
+# Filter everything except mc_cl 
+except_mc_sl <- ped %>%
+  filter(!Sensor %in% c("Melbourne Central", "State Library"))
+
+except_mc_sl
+```
+
+## Facetted side-by-side box plots
+```{R}
+# Side-by-side box plot of pedestrian count for each hour of the day facetted by Sensor 
+facetted_side_by_side_box_plot <- mc_sl %>% 
+  ggplot(aes(x = Time, y = Count, group = Time)) + geom_boxplot() + facet_wrap(~ Sensor)
+
+facetted_side_by_side_box_plot
+```
+
+## Facetted side-by-side box plots removed outliers
+```{R}
+# Remove outliers and produce facetted plot with 1 column
+# facet_wrap() split single plot into multiple side-by-side panels - one for each unique value in Sensor
+facetted_except_outlier <- mc_sl %>% 
+  filter(Count < 5000) %>% 
+  ggplot(aes(x = Time, y = Count, group = Time)) + geom_boxplot() + facet_wrap(~ Sensor, ncol = 1)
+
+facetted_except_outlier
+```
+
+## Grouping
+```{R}
+# Number of sensors in the ped 
+num_sensor <- ped %>% summarise(num_sensors = n_distinct(Sensor))
+
+num_sensor
+
+# For each sensor, compute the total count for January. Which sensor had the largest count? Which sensor had the smallest count?
+total_counts <- ped %>% group_by(Sensor) %>% summarise(sum = sum(Count, na.rm = TRUE)) %>% ungroup %>% arrange(desc(sum))
+
+total_counts
+
+largest_count <- total_counts %>% slice_head()
+largest_count 
+
+smallest_count <- total_counts %>% slice_tail()
+smallest_count
+
+# For each sensor, compute the total number of missing counts. Which sensor had the most missing counts? Why might this be?
+total_missing <- ped %>% group_by(Sensor) %>% summarise(tot_missing = sum(is.na(Count))) %>% ungroup() %>% arrange(desc(tot_missing))
+
+total_missing
+
+largest_tot <- total_missing %>% slice_head()
+largest_tot 
+
+smallest_tot <- total_missing %>% slice_tail()
+smallest_tot
+  
+
+# Filter ped to contain the counts from the Melbourne Central and State Library sensors only, then use a tidying function to create two columns that contain their counts.
+mc_sl_count <- ped %>% filter(Sensor %in% c("Melbourne Central", "State Library")) %>% spread(key = Sensor, value = Count) %>% select("Melbourne Central", "State Library", everything())
+
+mc_sl_count
+```
+
+## 100 per cent chart
+```{R}
+# Create the following 100 per cent chart to compare the foot traffic at Melbourne Central and the State Library during different hours of the day
+ped_100_percent <- ped %>% 
+  filter(Sensor %in% c("Melbourne Central", "State Library")) %>% 
+  ggplot(aes(x = Time, y = Count, fill = Sensor)) + 
+  geom_bar(stat = "identity", position = "fill") + 
+  facet_wrap(~ Date, ncol = 7) + 
+  labs(title = "Comparing foot traffic at Melbourne Central and the State Library during different hours of the day", subtitle = "Greater proportion of foot traffic at the State Library than Melbourne Central during the afternoon")
+
+ped_100_percent
+```
+
+## Filter for multiple sensors
+```{R}
+
+```

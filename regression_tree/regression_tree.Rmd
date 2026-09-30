@@ -1,0 +1,201 @@
+---
+title: "regression_tree"
+output: html_document
+date: "2026-09-29"
+---
+
+# Regression Tree
+
+```{R}
+library(tidyverse)
+```
+
+```{R}
+houses_raw <- read_csv("data/Melbourne_housing_FULL.csv")
+houses_raw %>% head()
+```
+
+## Produce a generalized pair plot
+
+```{R}
+library(GGally)
+```
+
+```{R}
+houses_raw %>%
+  select(Price, Landsize, Distance, Type) %>%
+  drop_na() %>%
+  ggpairs()
+
+```
+
+The diagonal:
+
+- density plots for continuous variables, bar plots for categorical variables.
+
+The upper:
+
+- correlations reported between continuous variables, boxplots of continuous values against the categorical variable.
+
+The lower:
+
+- scatter plots between continuous variable, histograms for categorical variables
+
+- Positively skewed for Price, Landsize, and Distance.
+
+- The prevalence of houses (`h`) in the auction market.
+
+- One property with extremely large land size but relatively lower price, considered as outlier.
+
+- Positive association between Landsize and Price, negative between Distance and Price
+
+```{R}
+house_full <- houses_raw %>%
+  mutate(
+    Suburb = as_factor(Suburb)
+  ) %>%
+  select (
+    Price, Suburb, Rooms, Type, Distance, Bedroom2, Bathroom, 
+    Car, Landsize, YearBuilt, Propertycount
+  )
+
+```
+
+Tree models use only a single variable at a time for any split, which means missing data becomes a less concerning issue for your growing trees. However, the presence of outliers may influence the robustness of the tree.
+
+Are there any outliers in the data?
+
+- Yes
+
+Why do you think they are outliers?
+
+- There is a property with landsize of more than 40,000 in metres, extremely far away from the rest data points.
+
+- By minimising sum of squares (ANOVA), we are forcing the partitions to have relatively equal variance.
+
+- The method could be influenced by outliers, but it would be isolating the effect to one partition.
+
+## Model fit
+
+```{R}
+library(rpart)
+```
+
+```{R}
+houses_rp_fit <- rpart(Price ~ ., data = house_full)
+houses_rp_fit
+```
+
+## Important variables
+
+```{R}
+var_importance <- tibble(
+  variable = names(houses_rp_fit$variable.importance),
+  importance = houses_rp_fit$variable.importance)
+
+var_importance %>% 
+  mutate(variable = fct_reorder(variable, importance)) %>% 
+  ggplot(aes(x = importance, y = variable)) +
+  geom_segment(aes(x = 0, y = variable, xend = importance, yend = variable)) +
+  geom_point(colour = "red")
+```
+
+3 most important types: Suburb, Type, Rooms
+
+```{R}
+
+```
+
+## Classification
+
+```{R}
+houses_raw <- read_csv("https://raw.githubusercontent.com/datascienceprogram/ids_course_data/master/Melbourne_housing_FULL.csv")
+```
+
+```{R}
+houses_suburb2 <- houses_raw %>%
+  select(
+    Suburb, Price, Landsize, Rooms, Type 
+  ) %>%
+  filter(
+    Suburb %in% c("Carlton", "Brighton")
+  )
+
+houses_suburb2
+```
+
+```{R}
+library(rpart)
+library(rpart.plot)
+```
+
+```{R}
+rp_fit_gini <- rpart(Suburb ~ ., data = houses_suburb2, parms = list(split = "gini"))
+
+rp_fit_gini
+
+```
+
+## Identify the number of terminal nodes
+
+Number of terminal nodes = 7
+
+First split of the tree = Landsize\>=160.
+
+```{R}
+printcp(rp_fit_gini)
+```
+
+```{R}
+rpart.plot(rp_fit_gini)
+```
+
+## Identify the number of splits
+
+How many splits are performed during the model fitting?
+
+- 6 splits
+
+After two splits, what is the R2 ? Interpret that R2 .
+
+- Relative error = 1 - R2
+
+- After 2 splits, the relative error = 0.72449, meaning R2 = 0.27551
+
+- Indicates model at this stage explains little of variability in y.
+
+```{R}
+rp_fit_entropy <- rpart(Suburb ~ ., data = houses_suburb2, parms = list(split = "information"))
+
+rpart.plot(rp_fit_entropy)
+```
+
+```{R}
+printcp(rp_fit_entropy)
+```
+
+## Compute the confusion table
+
+```{R}
+pred_gini <- predict(rp_fit_gini, houses_suburb2, type = "class")
+
+pred_entropy <- predict(rp_fit_entropy, houses_suburb2, type = "class")
+```
+
+```{R}
+table(houses_suburb2$Suburb, pred_gini)
+```
+
+```{R}
+table(houses_suburb2$Suburb, pred_entropy)
+```
+
+How many cases have been correctly classified for both models?
+
+- pred_gini = 444 + 47 = 491
+
+- pred_entropy = 449 + 39 = 488
+
+Which criteria gives a better model?
+
+- models are almost the same, with the pred_gini being slightly better (this is reflected in the R2 values too if calculated).

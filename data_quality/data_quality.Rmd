@@ -1,0 +1,91 @@
+---
+title: "data_quality"
+output: html_document
+date: "2026-09-08"
+---
+
+### Load tidyverse, lubridate and data
+```{R}
+library(tidyverse)
+library(lubridate)
+
+raw <- read.csv("data/salary_data_raw.csv")
+
+raw
+```
+
+### Clean inconsistent result 
+```{R}
+clean <- raw %>%
+  mutate(
+    Salary = recode(
+      Salary,
+      "70,000" = "70000",  
+      "72,000" = "72000",
+      "65k"    = "65000"
+    ),
+    Salary = as.numeric(Salary),
+    Date.of.employment = recode(
+      Date.of.employment,
+      "Feb 1, 2026"     = "1/02/2026", 
+      "2 days ago"      = "23/08/2026", 
+      "1/02/2000 10:00" = "1/02/2000"
+    ),
+    Date.of.employment = dmy(Date.of.employment)
+  )
+
+clean
+```
+
+## Dealing with NA value 
+### Approach 1 — Drop the missing values
+```{R}
+clean
+
+cleanclean_drop <- clean %>%
+  drop_na(Salary)
+
+clean_drop
+```
+
+### Approach 2 — Replace with the mean
+```{R}
+clean_mean <- clean %>%
+  mutate(
+    Salary = ifelse(
+      is.na(Salary),
+      mean(Salary, na.rm = TRUE),
+      Salary
+    )
+  )
+
+clean_mean
+```
+
+### Approach 3 — Rule-based imputation
+```{R}
+clean %>%
+  group_by(City) %>%
+  summarise(city_median = mean(Salary, na.rm = TRUE))
+
+clean_rule <- clean %>%
+  mutate(Salary = ifelse(is.na(Salary), 64750, Salary))
+
+clean_rule
+```
+
+### Approach 4 — Linear regression imputation
+```{R}
+sal_lm <- lm(Salary ~ Age + City, data = clean)
+
+clean_lm <- clean %>%
+  mutate(
+    Salary = ifelse(
+      is.na(Salary),
+      predict(sal_lm, new_data = clean),
+      Salary
+    )
+  )
+
+clean_lm
+```

@@ -1,0 +1,51 @@
+---
+title: "iris_factor"
+output: html_document
+---
+
+## Read iris.csv file
+```{R}
+iris1 <- read.csv("data/iris.csv")
+iris1
+head(iris1)
+```
+
+## Check the limited values which variable 'species' can have
+```{R}
+levels(iris1$Species)
+```
+
+## Update a value to a new value
+```{R}
+# Try to update the values to a new value which does not exist in the levels. Read the error which you see after running this code
+iris1$Species[iris1$Species == 'virginica'] <- 'new.species'
+
+# If you want to add a new value, say 'new.species' in this case, or update the previous values to a new value, you must add new.species to the levels first.
+levels(iris1$Species) <- c(levels(iris1$Species), "new.species")
+
+# Check the level, ensure new level is added
+levels(iris1$Species)
+
+iris1$Species[iris1$Species == 'virginica'] <- 'new.species'
+
+iris1
+```
+
+## Alternative to handle factor
+```{R}
+#Force R to treat all columns which have string values as string and do not consider any column type as Factor by using parameter stringsAsFactors = FALSE.
+iris4 <- read.csv("data/iris.csv", stringsAsFactors = FALSE)
+
+# print out string
+str(iris4)
+
+iris4$Species[iris4$Species == 'virginica'] <- 'new.species'
+
+# unique value in Species column
+unique(iris4$Species)
+```
+
+## have
+```{R}
+
+```

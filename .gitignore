@@ -19,6 +19,10 @@
 # User-specific project settings (The main metadata culprit)
 .Rproj.user/
 
+# Specific folder
+# Crygwin scripting materials
+tutorial_data
+
 # ass4 specific files
 consumer_complaints.zip
 property_transaction_victoria.zip

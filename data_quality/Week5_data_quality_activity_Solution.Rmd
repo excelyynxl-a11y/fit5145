@@ -1,0 +1,176 @@
+---
+title: "Activity: Data Quality — Cleaning the Australian Salary Data"
+author: "Chris"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+    df_print: paged
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+library(tidyverse)
+
+# if you haven't installed lubridate, please install running the code, install.packages("lubridate")
+library(lubridate)
+```
+
+# The task
+
+The goal is to clean the dataset so that we can obtain a valid estimate
+of the average salary of people in Australia.
+
+**Data collected from users on 25/08/2026.**
+
+### Read the raw data
+
+```{r raw-data}
+raw <- read.csv("salary_data_raw.csv")
+raw
+```
+
+<br>
+
+## Data quality issues
+
+### Clean inconsistent and incorrect values
+
+You may use `recode`syntax to clean the values. Once you clean, you need
+to convert the datatype for some variables, using `as.numeric()` or
+`dmy()` of lubridate library.
+
+```{r}
+clean <- raw %>%
+  mutate(
+    Salary = recode(Salary,
+                    "70,000" = "70000",   # thousands separator
+                    "72,000" = "72000",
+                    "65k"    = "65000"),  
+    Salary = as.numeric(Salary),
+    Date.of.employment = recode(Date.of.employment,
+      "Feb 1, 2026"     = "1/02/2026",     # written month -> dd/mm/yyyy
+      "2 days ago"      = "23/08/2026",    # relative to collection date 25/08/2026
+      "1/02/2000 10:00" = "1/02/2000"), # drop the time, keep the date
+    Date.of.employment = dmy(Date.of.employment) # convert to datetime datatype# convert to numeric
+  )
+
+clean
+```
+
+<br>
+
+### Dealing with the missing values
+
+#### Approach 1 — Drop the missing values
+
+```{r drop}
+clean_drop <- clean %>%
+  drop_na(Salary)
+
+clean_drop
+```
+
+*When it is reasonable:* when the data is **missing completely at
+random** and the sample is large enough that losing rows costs little.
+
+*Cost here:* with n = 6 we throw away 17% of the sample, and we lose
+Mike's age and city information as well.
+
+<br>
+
+#### Approach 2 — Replace with the mean
+
+Use `ifelse`syntax to replace the missing value with mean of Salary.
+
+```{r}
+clean_mean <- clean %>%
+  mutate(Salary = ifelse(is.na(Salary), mean(Salary, na.rm = TRUE), Salary))
+
+clean_mean
+```
+
+*Cost:* it shrinks the variance and weakens any correlation with other
+variables. It also ignores everything we know about Mike (55, Sydney).
+
+<br>
+
+#### Approach 3 — Rule-based imputation
+
+Calculate the median salary for each city, then replace the missing
+Salary value with the mean salary for that city. To get the mean salary
+for each city, please use `group_by()`.
+
+```{r rule-impute}
+clean %>%
+  group_by(City) %>%
+  summarise(city_median = mean(Salary, na.rm = TRUE))
+
+
+clean_rule <- clean %>%
+  mutate(Salary = ifelse(is.na(Salary), 64750, Salary))
+
+clean_rule
+```
+
+*Advantage:* considers the impact of other variables such as City when
+imputing missing value of salary. *Cost*: the rule is the analyst's
+judgement rather than something estimated from the data, and it is
+coarse — it ignores Age
+
+<br>
+
+#### Approach 4 — Linear regression imputation
+
+```{r}
+# Run a linear regression of salary on age (lm() drops the NA row automatically)
+sal_lm <- lm(Salary ~ Age + City, data = clean)
+
+# Impute the missing salary from the fitted model
+clean_lm <- clean %>%
+  mutate(Salary = ifelse(is.na(Salary),
+                         predict(sal_lm, newdata = clean),
+                         Salary))
+clean_lm
+```
+
+*Advantage:* identify the complex pattern between several predictors and
+the imputed value is tailored to Mike specifically (55, Sydney).
+
+*Cost:* overfitting
+
+<br>
+
+<br>
+
+### Remaining issues
+
+Cleaning fixed the *format* of the data. It did not fix these:
+
+**Still unresolved in the data**
+
+1.  **Tom's record is internally impossible** — age 27 with a start date
+    in 2000 means he started work at age 1. Either the age or the date
+    is wrong. Chris (started at \~15) is implausible but not impossible.
+2.  **The sample cannot answer the question.** n = 6 people from two
+    cities cannot estimate the average salary "of people in Australia".
+    No regional, remote, industry, gender or age-group coverage; the ABS
+    uses samples in the tens of thousands.
+3.  **Salary is undefined.** Gross or net? Full-time or pro-rata? Does
+    it include superannuation, bonuses, overtime? A part-time salary and
+    a full-time salary are not comparable, and the survey does not
+    record hours.
+4.  **No time reference for the salary.** Is it the current salary or
+    the salary at the date of employment? Tom started in 2000 — a 2000
+    salary and a 2026 salary are not comparable without inflation
+    adjustment.
+
+<br>
+
+All of the material is copyrighted under the [Creative Commons BY-SA
+4.0](https://creativecommons.org/licenses/by/4.0/) copyright.

@@ -1,0 +1,82 @@
+---
+title: "visualising_missing_data"
+output: html_document
+date: "2026-08-24"
+---
+
+# Load 
+```{R}
+library(naniar)
+library(tidyverse)
+```
+
+# How ggplot displays missing values.
+```{R}
+ggplot(oceanbuoys,
+       aes(x = sea_temp_c,
+           y = humidity)) + 
+  geom_point() + 
+  labs(x = "Sea temperature (celcius)",
+       y = "Humidity")
+
+# Warning: “Removed 94 rows containing missing values”
+```
+
+# Adding missing value to plot
+```{R}
+ggplot(oceanbuoys,
+       aes(x = sea_temp_c,
+           y = humidity)) + 
+  scale_color_brewer(palette = "Dark2") + 
+  geom_miss_point() + 
+  labs(x = "Sea temperature (celcius)",
+       y = "Humidity")
+```
+# Adding missing value to plot by year
+```{R}
+ggplot(oceanbuoys,
+       aes(x = sea_temp_c,
+           y = humidity)) + 
+  scale_color_brewer(palette = "Dark2") + 
+  facet_wrap(~year) +
+  geom_miss_point() + 
+  labs(x = "Sea temperature (celcius)",
+       y = "Humidity")
+```
+
+```{R}
+ggplot(oceanbuoys,
+       aes(x = sea_temp_c,
+           y = air_temp_c)) + 
+  geom_miss_point() + 
+  scale_color_brewer(palette = "Dark2") + 
+  facet_wrap(~year) +
+  labs(x = "Sea temperature (celcius)",
+       y = "Air temperature (celcius)")
+```
+
+# Shadow matrix
+```{R}
+as_shadow(oceanbuoys)
+
+oceanbuoys_shadow <- bind_shadow(oceanbuoys)
+
+glimpse(oceanbuoys_shadow)
+```
+
+# Relationship with other variable 
+```{R}
+ggplot(oceanbuoys_shadow,
+       aes(x = wind_ew,
+           y = wind_ns,
+           colour = air_temp_c_NA)) + 
+  geom_point(alpha = 0.7) + 
+  theme(aspect.ratio = 1) + 
+  scale_color_brewer(palette = "Dark2") + 
+  labs(x = "East-West Winds",
+       y = "North-South Winds") 
+```
+
+```{R}
+
+```

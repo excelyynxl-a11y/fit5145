@@ -1,0 +1,245 @@
+---
+title: "eda_and_correlation_analysis"
+output: html_document
+date: "2026-09-08"
+---
+
+# Exploratory Data Analysis
+
+### Load tidyverse and data
+```{R}
+library(tidyverse)
+
+ped_melb.south.bourke <- read_csv("data/ped_melb.south.bourke.csv")
+
+ped_melb.south.bourke
+```
+
+### Look at data 
+```{R}
+glimpse(ped_melb.south.bourke)
+```
+
+### Decompose Date_Time 
+```{R}
+library(lubridate)
+
+ped_melb.south.bourke <- ped_melb.south.bourke %>%
+  mutate(
+    year = year(Date_Time),
+    month = month(Date_Time, label = TRUE, abbr = TRUE),
+    wday = wday(Date_Time, label = TRUE, abbr = TRUE,
+                week_start = 1),
+    day = day(Date_Time)
+  )
+
+ped_melb.south.bourke
+```
+
+### Exploring Melbourne Central time gaps  
+```{R}
+ped_melb.south.bourke %>%
+  filter(Sensor == "Melbourne Central") %>%
+  ggplot(aes(x = Date_Time, y = Count)) + 
+  geom_point(size = 0.7) + 
+  facet_wrap(year ~., scales = "free_x", nrow = 3) + 
+  labs(title = "Melbourne Central", y = "Count", x = "Date-Time")
+```
+
+### Exploring Southbank time gaps  
+```{R}
+ped_melb.south.bourke %>%
+  filter(Sensor == "Southbank") %>%
+  ggplot(aes(x = Date_Time, y = Count)) + 
+  geom_point(size = 0.7) + 
+  facet_wrap(year ~., scales = "free_x", nrow = 3) + 
+  labs(title = "Melbourne Central", y = "Count", x = "Date-Time")
+```
+
+### Exploring Bourke Street Mall (North) Central time gaps  
+```{R}
+ped_melb.south.bourke %>%
+  filter(Sensor == "Bourke Street Mall (North)") %>%
+  ggplot(aes(x = Date_Time, y = Count)) + 
+  geom_point(size = 0.7) + 
+  facet_wrap(year ~., scales = "free_x", nrow = 3) + 
+  labs(title = "Melbourne Central", y = "Count", x = "Date-Time")
+```
+
+### Table of mean and median pedestrian count 
+```{R}
+ped_melb.south.bourke %>%
+  group_by(Sensor) %>%
+  summarise(
+    meanCount = mean(Count, na.rm = TRUE),
+    medianCount = median(Count, na.rm = TRUE)
+  ) %>%
+  ungroup()
+```
+
+### Histogram of pedestrian count 
+```{R}
+ped_melb.south.bourke %>%
+  ggplot(aes(x = Count)) +
+  geom_histogram() +
+  labs(title = "Distribution of hourly pedestrian count", 
+       x = "Pedestrians detected",
+       y = "Frequency") +
+  facet_wrap(~ Sensor, scales = "free", nrow = 3)
+```
+
+### Median hourly pedestrian count for each month and location 
+```{R}
+ped_melb.south.bourke %>% 
+  group_by(Sensor, month) %>%
+  summarise(medianCount = median(Count, na.rm=TRUE)) %>%
+  ungroup() %>%
+  spread(Sensor, medianCount)
+```
+
+### Line plot of median hourly pedestrian count 
+```{R}
+ped_melb.south.bourke %>%
+  group_by(Sensor, month) %>%
+  summarise(
+    medianCount = median(Count, na.rm = TRUE)
+  ) %>%
+  ungroup() %>%
+  ggplot(aes(x = month, y = medianCount, colour = Sensor, group = Sensor)) + 
+  geom_point() + 
+  geom_line() + 
+  labs(title = "Median Hourly Pedestrian Counts, 2016-2018", 
+       subtitle = "Generally more pedestrians detected in Southbank across all months.",
+       x = "Month", 
+       y = "Median Counts")
+```
+
+### Box plot of pedestrian counts 
+```{R}
+ped_melb.south.bourke %>%
+  ggplot(aes(x = as.factor(Time), y = Count, colour = Sensor)) +
+  geom_boxplot(alpha = 0.5) + 
+  facet_wrap(~ year, nrow = 3) + 
+  theme(legend.position = "bottom") + 
+  labs(title = "Distribution of pedestrian counts at each hour of the day", y = "Pedestrian Count", x = "Hour of the day")
+```
+
+### Pedestrian count days prior to NYE
+```{R}
+ped_melb.south.bourke %>%
+  filter(month == "Dec", day %in% 24:31) %>%
+  ggplot(aes(x = Date_Time, y = Count, colour = Sensor)) + 
+  geom_line(alpha = 0.5) +
+  facet_wrap(year ~., scales = "free_x", nrow = 3) + 
+  theme(legend.position = "bottom") + 
+  labs(title = "Pedestrian count at each hour of the day leading up to NYE", y = "Pedestrian Count", x = "Hour of the day")
+```
+
+# Correlation Analysis
+1. Pearson Correlation: Measure the linear relationship between two continuous variables.
+
+2. Spearman Rank Correlation: Assess the strength and direction of association between two ordinal variables (data placed into categories that follow a specific, meaningful rank or sequential order).
+
+3. Chi-Square Test: Assess the association between two nominal variables (data used to label or name variables into distinct, non-overlapping categories without any numerical value or order).
+
+### Load tidyverse and data
+```{R}
+library(tidyverse)
+
+student <- read_csv("data/StudentsPerformance.csv")
+
+student
+```
+
+### Check data type
+```{R}
+glimpse(student)
+```
+
+## Pearson Correlation and Spearman Rank Correlation
+To perform Pearson Correlation and Spearman Rank Correlation, please use cor function together with method argument.
+
+### Perform pearson Correlation for two variables
+```{R}
+cor(student$total_study_hours, student$math_score, method = "pearson")
+
+```
+
+### Perform Spearman Rank Correlation for two variables
+```{R}
+# convert the corresponding variable values into numbers, using the 'recode' function
+student <- student %>%
+  mutate(parental_level_of_education = recode(
+    parental_level_of_education, 
+    "primary school" = 1,
+     "high school" = 2, 
+    "diploma" = 3,
+    "associate's degree" = 4, 
+    "bachelor's degree" = 5, 
+    "master's degree" = 6
+  ),
+  family_Income_level = recode(
+    family_Income_level,
+    "Level 1" = 1, 
+    "Level 2" = 2, 
+    "Level 3" = 3, 
+    "Level 4" = 4, 
+    "Level 5" = 5, 
+    "Level 6" = 6, 
+    "Level 7" = 7, 
+    "Level 8" = 8, 
+    "Level 9" = 9, 
+    "Level 10" = 10
+  ))
+
+cor(student$parental_level_of_education, student$family_Income_level, method = "spearman")
+
+```
+
+## Chi-Square Test
+To perform Chi-Square Test, please use chisq.test function. First, create a contingency table for two variables, using table function, then apply chisq.test
+### Perform Chi-Square test for two variables
+```{R}
+# Create a contingency table, using the 'table' function
+contingency_table <- table(student$race_ethnicity, student$suburb)
+
+contingency_table
+
+chisq.test(contingency_table)
+```
+
+## Correlation values between the 4 variables
+```{R}
+temp <- student %>%
+  select('total_study_hours', 'math_score' ,'reading_score')
+
+cor(temp, method = "pearson")
+```
+
+## Correlation between a continuous variable and a nominal variable
+ANOVA test: a statistical tool used to determine if there are statistically significant differences between the means of three or more independent groups.
+- Grouping Variable row (the effect between groups) 
+- Residuals row (the variation within groups)
+
+
+```{R}
+anova_result <- aov(student$math_score ~ student$race_ethnicity, data = student)
+
+summary(anova_result)
+```
+
+### Visualising correlation 
+Draw a plot to see the correlation of two continuous variables
+```{R}
+plot(student$total_study_hours, student$math_score, xlab = "total_study_hours", ylab = "math_score", main = "Scatterplot of study time vs math score")
+```
+
+Draw a plot to see the relationship between a nominal variable and a continuous variable```{R}
+
+```{R}
+ggplot(student, aes(x = suburb, y = writing_score, fill = suburb)) + 
+  geom_boxplot() + 
+  labs(x = "suburb", y = "writing_score",
+       title = "writing_score for each suburb") + 
+  theme_minimal()
+```
