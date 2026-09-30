@@ -1,0 +1,1432 @@
+---
+title: "assignment2"
+author: "Lim Excelyynx (34476245)"
+date: "2026-08-25"
+output:
+  html_document:
+    df_print: paged
+---
+
+# Assignment 2
+
+### Load tidyverse, lubridate, readxl
+
+```{R}
+library(tidyverse)
+library(lubridate)
+library(readxl)
+```
+
+### Read and save Wastes.csv and Year_State_ID.csv
+
+```{R}
+waste <- read_csv("data/Wastes.csv")
+waste
+
+year_state_id <- read_csv("data/Year_State_ID.csv")
+year_state_id
+```
+
+## Determining how to handling missing value
+
+Prior to conducting analysis, we will determine how to handle missing values by first observing how many missing entries are in the waste dataset.
+
+```{R}
+missing_entries <- waste %>% 
+  filter(if_any(everything(), is.na))
+
+missing_entries 
+```
+
+The 32 rows with NA observed:
+
+1.  A row of Category "Space debris" has several NA values across Case_ID, Year_State_ID, Stream, Fate, Tonnes, Core_Non-core and Description. Hence, the suitable approach is to drop this case. since it is only a small fraction of the entire dataset (1 entry) with several missing values.
+
+```{R}
+# drop entry with Category "Space debris"
+waste_drop <- waste %>%
+  filter(is.na(Category) | Category != "Space debris")
+
+```
+
+2.  The remaining 30 entries only has one variable with NA value. The NAs are small in number and located in few cases and variables. Hence, the suitable approach is to impute these values by replacing with appropriate values by doing analysis and observation as we move on to each task.
+
+## Q1. Number of unique "Category" values in Wastes.csv
+
+### Data Cleaning Category
+
+Observe unique category.
+
+```{R}
+waste_drop %>%
+  select(Category) %>%
+  distinct(Category)
+```
+
+Initially, we observed 20 unique Category, including some concerning (inconsistent spelling, invalid category) and NA values, which will require data cleaning.
+
+Some concerning Category are observed. We need to make the Category naming consistent and reassign an appropriate value for miscategorized Category.
+
+```{R}
+# record a list of concerning values 
+concerning_category <- c(
+  "Building & demolition materials",
+  "Toxic wastes",
+  "Plastic",
+  "organics",
+  "Aluminium",
+  "Metals & Organics",
+  "Toxic wastes",
+  "Recycling"
+) 
+```
+
+To determine how to impute the concerning_category, we can observe others related field like Type, Stream and Fate.
+
+```{R}
+# inspect concerning Category values to determine appropriate way on how to impute
+waste_drop %>%
+  filter(
+    Category %in% concerning_category |
+      is.na(Category)
+  ) %>%
+  select(
+    Category,
+    Type,
+    Stream,
+    Fate
+  )
+```
+
+The concerning Category observed that requires data cleaning action:
+
+1.  "Building & demolition materials" should be replaced with "Building and demolition materials" is the same Category but naming inconsistency.
+2.  "Hazardous wastes" and "HW" is the same Category but naming inconsistency.
+3.  "Plastic" and "Plastics" is the same Category but naming inconsistency.
+4.  "organics" and "Organics" is the same Category but naming inconsistency.
+5.  "Aluminium" is a Type, not Category. Should be replaced with "Metals".
+6.  "Metals & Organics" entry has Type of "Food organics". Should be replaced with Category of "Organics".
+7.  "Toxic wastes" has Type mentioning "hazardous wastes". Should be replaced with "Hazardous wastes" for consistency.
+8.  "Recycling" entry has Type "Polyvinyl chloride (PVC) (3)", which reflects a Category "Plastics". Furthermore, "Recycling" is a Fate, not a Category.
+
+NA Category are further analyse to determine a suitable replacement. We create a na_category_type table to infer waste of similar Type has what kind of category.
+
+```{R}
+na_category_type <- waste_drop %>% 
+  filter(
+    is.na(Category)
+  ) %>% distinct(Type)
+
+na_category_type
+```
+
+Then join na_category_type to waste_drop table to determine a suitable value to replace NA.
+
+```{R}
+waste_drop %>% semi_join(
+  na_category_type,
+  by = "Type"
+) %>% select(Category, Type)
+```
+
+It is observed that the all NA Category values with Type of "Other soil/sludges (other N)" and "Paints, resins, inks, organic sludges (F)" belongs to Category of "Hazardous wastes", informing us:
+
+9.  NA entry with Type of "Other soil/sludges (other N)" and "Paints, resins, inks, organic sludges (F)", which is suitable to be replaced with "Hazardous wastes".
+
+Now, values of Category column will be updated using recode() and case_when() accordingly.
+
+```{R}
+# impute their correct Category
+waste_unique <- waste_drop %>%
+  filter(!is.na(Category)) %>%
+  mutate(
+    Category = recode(
+      Category,
+      # spelling inconsistency
+      "HW" = "Hazardous wastes",
+      "Plastic" = "Plastics",
+      "organics" = "Organics",
+      "Building and demolition materials" = "Building & demolition materials",
+      
+      # miscategorisation
+      "Aluminium" = "Metals",
+      "Metals & Organics" = "Organics",
+      "Toxic wastes" = "Hazardous wastes",
+      "Recycling" = "Plastics"
+    ),
+    Category = case_when(
+      # missing Category is inferred from Type
+      is.na(Category) &
+        Type == "Other soil/sludges (other N)" ~
+        "Hazardous wastes",
+      is.na(Category) &
+        Type == "Paints, resins, inks, organic sludges (F)" ~
+        "Hazardous wastes",
+      TRUE ~ Category
+    )
+  )
+
+```
+
+Observe new unique Category.
+
+```{R}
+waste_unique %>%
+  select(Category) %>%
+  distinct(Category) %>%
+  arrange()
+```
+
+### Count unique Category
+
+To count number of unique waste category, we get the number of rows of unique data from Category column in waste_unique table.
+
+```{R}
+number_unique_wastes_category <- waste_unique %>% 
+  summarise(
+    Total_Unique_Category = n_distinct(Category)    
+  )
+
+number_unique_wastes_category
+```
+
+After data cleaning, the total unique Category has 11 values.
+
+## Q2. Number of negative feedback comments in the 'Description' column with an environmental impact score of 2 or 3
+
+The current **waste_unique** as a result from Q1 has its Category value without spelling inconsistency, invalid category or NA value.
+
+### Observe Description
+
+Observe the patterns of values of Description column of waste_unique.
+
+```{R}
+waste_unique %>% 
+  select("Description") %>% 
+  head()
+```
+
+It is observed that Description values looks like "... Environmental Impact Score: 6/10 ...".
+
+### Extract Environmental Impact Score
+
+To obtain environmental impact score, we extract the value from "value/10" of Description column into a new column called Env_Impact_Score.
+
+```{R}
+waste_unique <- waste_unique %>%
+  mutate(Env_Impact_Score = as.numeric(
+      str_extract(
+        Description,
+        "(?<=Environmental Impact Score: )[0-9]+"
+      )
+    )
+  )
+
+waste_unique %>% 
+  select(Env_Impact_Score) %>% 
+  arrange(Env_Impact_Score) %>%
+  head()
+
+```
+
+To count number of entries with Env_Impact_Score value of 2-3, we filter only rows with Env_Impact_Score = 2 or 3, then mutate a new total_negative_env_impact_score that count the number of rows. We save the this info in number_negative_env_impact_score table.
+
+```{R}
+number_negative_env_impact_score <- waste_unique %>%
+  filter(
+    Env_Impact_Score %in% c(2,3)
+  ) %>%
+  summarise(
+    Total_Negative_Env_Impact_Score = n()
+  )
+
+number_negative_env_impact_score
+```
+
+Total negative feedback comments in "Description" with environmental impact score of 2 or 3 is **6312**
+
+## Q3. Calculate the fractions of waste tonnes of different waste sources, draw a chart to visualize the fraction numbers specific to the Category value
+
+### Data Cleaning Stream
+
+Observe Stream column from waste_unique.
+
+```{R}
+waste_unique %>% 
+  select(Stream) %>%
+  distinct(Stream)
+```
+
+We observed from the Stream column contain duplicated values for the same Stream:
+
+1.  "Construction and demolition waste" should be standardized to "C&I"
+2.  "Municipal solid waste" should be standardized to "MSW"
+
+We will standardized them accordingly to specification: all Stream values will be replace to only 3 options: C&I, C&D, MSW using recode(). This ensure same waste are treated the same stream group when calculating fraction later.
+
+```{R}
+waste_unique <- waste_unique %>%
+  mutate(
+    Stream = recode(
+      Stream,
+      "Construction and demolition waste" = "C&D",
+      "Municipal solid waste" = "MSW",
+    )
+  )
+```
+
+Observe new unique Stream.
+
+```{R}
+waste_unique %>% 
+  select(Stream) %>%
+  distinct(Stream)
+```
+
+Now, Stream is standardized to only 3 valid Stream value.
+
+### Data Cleaning Tonnes
+
+Observe any NA Tonnes values from waste_unique.
+
+```{R}
+waste_unique %>% 
+  filter(
+    is.na(Tonnes)
+  ) %>%
+  select(Case_ID, Tonnes, Description)
+```
+
+We inspect the NA tonnes count and percentage of how much these NA values constitute to overall dataset using summary().
+
+```{R}
+# calculate na_tonnes_count and na_percentage
+waste_unique %>%
+  summarise(
+    NA_Tonnes_Count = sum(is.na(Tonnes)),
+    Total_Tonnes = n(),
+    NA_Percentage = NA_Tonnes_Count / Total_Tonnes * 100
+  )
+```
+
+There is a total of 14 NA Tonnes in waste_unique, which makes only a small proportion (0.038%) of the dataset. Furthermore, the other reference column like Decsription also shows "total of nan tonnes", which is provide no information on how to impute Tonnes. Hence, NA tonnes will simply be drop
+
+```{R}
+# drop NA Tonnes values
+waste_unique <- waste_unique %>%
+  filter(!is.na(Tonnes))
+```
+
+Observe any negative Tonnes values.
+
+```{R}
+waste_unique %>% 
+  select(Case_ID, Tonnes, Description) %>%
+  filter(Tonnes < 0)
+```
+
+We observed there are 6 values with negative Tonnes values. We need to clean these inputs by observing their respective Description. We observe that:
+
+1.  Case_ID of 34666 has a mention of "141663.39 tonnes" in Description. This value should be imputed with 141663.39 tonnes as the Description has provided an obvious corresponding tonnes value.
+2.  The others have a mention of "-0.00 tonnes" in Description. These values should be imputed with 0 tonnes as we treat them as numerical error. Keeping "-0.00 tonnes" is misleading and unmeaningful.
+
+We will use these observation to impute and replace each negative value using case_when().
+
+```{R}
+# replace negative Tonnes values
+waste_unique <- waste_unique %>%
+  mutate(
+    Tonnes = case_when(
+      Case_ID == 34666 ~ 141663.39,
+      Tonnes < 0 ~ 0,
+      TRUE ~ Tonnes 
+    )
+  )
+```
+
+### Calculating Waste Fraction
+
+To calculate waste fraction, a new waste_fraction table is created by:
+
+- Grouping waste_unique by Category and Stream.
+
+- Stream_Tonnes is then obtained by summing Tonnes in each group.
+
+- Category_Total is sum of Stream_Tonnes.
+
+- Fraction is Stream_Tonnes / Category_Total
+
+```{R}
+waste_fraction <- waste_unique %>%
+  group_by(Category, Stream) %>%
+  summarise(
+    Stream_Tonnes = sum(Tonnes, na.rm = TRUE)
+  ) %>%
+  ungroup() %>%
+  group_by(Category) %>%
+  mutate(
+    Category_Total = sum(Stream_Tonnes),
+    Fraction = Stream_Tonnes / Category_Total
+  ) %>%
+  ungroup() %>%
+  mutate(
+    Category = factor(
+      Category,
+      levels = sort(unique(Category))
+    )
+  )
+
+waste_fraction %>% arrange(Stream)
+```
+
+### Visualization of Fraction of Waste Tonnes by Source of each Category
+
+To visualize the proportional distribution of waste streams within each category, a 100% filled stacked bar chart was selected. The x-axis represents discrete waste Category, y-axis represents the Fraction of Tonnes and fill color distinguishes the contributing waste Streams. A proportional stacked bar chart is suitable because Category and Stream are nominal categorical variables, while the computed fractions represent relative compositions that sum to 100% within each Category. Normalizing the data into proportions allows direct comparison of stream composition across categories of varying total waste volumes.
+
+```{R}
+ggplot(
+  waste_fraction,
+  aes(x = Category, y = Fraction, fill = Stream)) +
+  geom_col() +
+  coord_flip() +
+  scale_y_continuous(
+    labels = scales::percent_format(),
+    limits = c(0, 1)
+  ) +
+  labs(
+    title = "Fraction of Waste Tonnes by Source of each Category",
+    x = "Category",
+    y = "Fraction of Tonnes",
+    fill = "Stream"
+  ) +
+  theme_minimal()
+```
+
+## Q4. Add the 'Year' and 'State' values from Year_State_ID.csv to Wastes.csv, compute the total waste tonnes for each year and state, and store the result in a dataset named 'temp', compute and display the statistical information (min, max, mean) of the total waste tonnes for each state in ‘temp’
+
+### Data Cleaning Year_State_ID
+
+Inspect the year_state_id unique State values;
+
+```{R}
+year_state_id %>% count(State) %>% arrange(n)
+```
+
+We observed that:
+
+1.  State naming are inconsistent with mixture of upper/lowercase and all upper case.
+2.  Invalid "Australia" is also observed with only a frequency of 2. As mentioned in brief, State are "State or territory in which the waste was generated." but "Australia" is a country.
+
+```{R}
+year_state_id %>% filter(State == "Australia")
+```
+
+Inspect the year_state_id unique Year values;
+
+```{R}
+year_state_id %>% distinct(Year)
+```
+
+We observe that some Year are invalid financial year (eg: 2005-2007, 2005-2008, 2005-2009\
+2005-2010, 2005-2011, 2005-2012, 2005-2013) as mentioned in the brief, a valid financial Year should have a range of 1 year (eg: 2006-2007 and 2020-2021).
+
+We will create a new year_clean table that:
+
+1.  Upper-cased State for consistency.
+2.  Remove invalid financial year by separating Year into start and end.
+3.  Filter only cases where end - start == 1.
+
+```{R}
+year_clean <- year_state_id %>%
+  # uppercase State
+  mutate(
+    State = str_to_upper(State)
+  ) %>%
+  # separate start and end year
+  separate(
+    Year,
+    into = c("start", "end"),
+    sep = "-",
+    remove = FALSE) %>%
+  # convert to numeric
+  mutate(
+    start = as.numeric(start),
+    end = as.numeric(end) 
+  ) %>% 
+  # remove invalid year range
+  filter(
+    end - start == 1
+  )
+
+year_clean
+```
+
+### Joining Year_State_ID.csv and Wastes.csv into temp
+
+To combine both Year_State_ID.csv and Wastes.csv into a waste_year table, left join waste_unique as primary table to year_clean as look-up table. Left-join is used because the main goal is to add Year and State attribute from year_clean onto every entry in waste_unique. Left join will oink foreign key (Year_State_ID from waste_unique) to primary key (ID in year_clean). This ensures all observation records from waste_unique are fully preserved.
+
+```{R}
+waste_year <- waste_unique %>%
+  left_join(
+    year_clean, 
+    by = c("Year_State_ID" = "ID")
+  )
+```
+
+To determine how to handle "AUSTRALIA", we observe the row.
+
+```{R}
+waste_year %>% filter(State == "AUSTRALIA")
+```
+
+Since there is no useful information on how to impute State of "AUSTRALIA" and considering it is only 1 entry of the entire dataset, we will simply filter to remove the invalid AUSTRALIA state.
+
+```{R}
+waste_year <- waste_year %>% 
+  filter(State != "AUSTRALIA")
+```
+
+### Temp dataset
+
+Next, we create the new temp by:
+
+- Calculating Tonnes_Waste_Year. Year and State are grouped in order to compute Tonnes_Waste_Year by summarizing to to sum Tonnes of each group.
+
+- Reshaping waste_year to make each state as a single column using pivot_wider().
+
+```{R}
+temp <- waste_year %>%
+  group_by(Year, State) %>%
+  summarise(
+    Total_Waste_Tonnes = sum(Tonnes, na.rm = TRUE)
+  ) %>%
+  ungroup() %>%
+  pivot_wider(
+    names_from = State,
+    values_from = Total_Waste_Tonnes
+  )
+
+temp
+```
+
+### Summary for temp
+
+State the summary (min, q1, median, mean, q3, max) of each state in single function using summary().
+
+```{R}
+summary(temp)
+```
+
+## Q5. Yearly trend of total waste tonnes of food organics for each state
+
+### Format Year
+
+To format the year from, for example: "2020-2021" to "2020", a new waste_year_formatted table is from year_waste in Q4. Year is extracted by extracting the first 4 digit from original Year column. This ensures waste_year_formatted table can be used for remaining task, including visualization of yearly trend of total waste tonnes of food organics for each state later.
+
+```{R}
+waste_year_formatted <- waste_year %>%
+  mutate(
+    Year = as.numeric(str_extract(Year, "^\\d{4}"))
+  )
+
+waste_year_formatted %>% head()
+```
+
+Observe Type in waste_year_formatted.
+
+```{R}
+waste_year_formatted %>% 
+  count(Type) %>% 
+  arrange(n)
+```
+
+We observe that all Type has been assigned to a valid entry and no NA Type is detected. Thus, no data cleaning is required on Type.
+
+### Filter food organics
+
+Before analyzing food organics, a new food_organics_waste table with only data of food organics is created. The entries consist of Type that equals "Food Organics". To obtain Food_Organic_Tonnes, table is grouped by Year and State, then obtained by summing each group Tonnes values.
+
+The food_organics_waste table has: 1. Year 2. State 3. Food_Organics_Tonnes
+
+```{R}
+food_organics_waste <- waste_year_formatted %>%
+  filter(
+    Type == "Food organics"
+  ) %>%
+  group_by(Year, State) %>%
+  summarise(
+    Food_Organics_Tonnes = sum(Tonnes, na.rm = TRUE)
+  ) %>%
+  ungroup()
+
+food_organics_waste
+```
+
+### Plot food organics by year
+
+To observe yearly trend of food organics waste tonnes by state, a multiline chart is plotted with x-axis as year and y-axis as total food organics waste tonnes, each line is of a different color to represent each state. Line chart is suitable because we want to visualise the trend of food organics waste across a timeline. Line of differing color allow efficient comparative evaluation.
+
+```{R}
+ggplot(food_organics_waste, aes(x = Year, y = Food_Organics_Tonnes, color = State)) + 
+  geom_line(linewidth = 1) +
+  geom_point() + 
+  labs(
+    title = "Yearly Trend of Food Organics Waste Tonnes by State",
+    x = "Year",
+    y = "Total Food Organics Waste (Tonnes)",
+    color = "State"
+  ) +
+  theme_minimal()
+```
+
+## Q6. Display the most recycled waste Type and the most energy-recovered waste Type with the corresponding year. Display the most increased waste Type over years
+
+Observe Fate values of waste_year_formatted.
+
+```{R}
+waste_year_formatted %>% count(Fate) %>% arrange(n)
+```
+
+We observe that all 5 Fate values are valid, distinct with non-zero count as mentioned in brief without NA values present. Thus, no data cleaning on Fate is required.
+
+### Waste with recycling as Fate
+
+A new fate_recycling table is created with entries consist of filtered Fate that equals "Recycling".
+
+```{R}
+fate_recycling <- waste_year_formatted %>% 
+  filter(Fate == "Recycling")
+
+fate_recycling
+```
+
+### Sum per year of each waste type with recycling as Fate
+
+To obtain Recycled_Tonnes, fate_recycling table is grouped by Type and Year, then obtained by summing each group Tonnes values.
+
+```{R}
+recycled_waste_type <- fate_recycling %>%
+  group_by(Type, Year) %>%
+  summarise(
+    Recycled_Tonnes = sum(Tonnes, na.rm = TRUE)
+  ) %>%
+  ungroup()
+
+recycled_waste_type %>% arrange(Year)
+```
+
+### Most recycled waste type
+
+To obtain the most recycled waste type, we filter entry with its Recycled_Tonnes equating to the max of the Recycled_Tonnes.
+
+```{R}
+most_recycled_waste_type <- recycled_waste_type %>%
+  filter(Recycled_Tonnes == max(Recycled_Tonnes))
+
+most_recycled_waste_type
+```
+
+The most recycled waste Type is **Bricks, concrete and pavers** in the year **2020** with a total tonnes of **10478681** tonnes.
+
+### Waste with energy-recovered as Fate
+
+A new fate_energy_recovered table is created with entries consist of filtered Fate that equals "Energy Recovered".
+
+```{R}
+fate_energy_recovery <- waste_year_formatted %>%
+  filter(Fate %in% c("Energy recovery"))
+
+fate_energy_recovery
+```
+
+### Sum per year of each waste type with energy-recovered as Fate
+
+To obtain Energy_Recovered_Tonnes, fate_energy_recovered table is grouped by Type and Year, then obtained by summing each group Tonnes values.
+
+```{R}
+energy_recovered_waste_type <- fate_energy_recovery %>%
+  group_by(Type, Year) %>%
+  summarise(Energy_Recovered_Tonnes = sum(Tonnes, na.rm = TRUE)) %>%
+  ungroup()
+
+energy_recovered_waste_type %>% arrange(Year)
+```
+
+### Most energy-recovered waste type
+
+To obtain the most energy-recovered waste type, we filter entry with its Energy_Recovered_Tonnes equating to the max of the Energy_Recovered_Tonnes
+
+```{R}
+most_energy_recovered_waste_type <- energy_recovered_waste_type %>%
+  filter(Energy_Recovered_Tonnes == max(Energy_Recovered_Tonnes))
+
+most_energy_recovered_waste_type
+```
+
+The most recycled waste Type is **Food organics** in the year **2015** with a total tonnes of **1140998**.
+
+### Find first (2006) and last year (2020) data of each waste type
+
+Filter only entry in waste_year_formatted that has a Tonnes value in the year of 2006 and 2020 as described in brief, the original data presented in Year_State_ID.csv is between 2006-2007 (2006) and 2020-2021 (2020).
+
+```{R}
+first_last_waste_type <- waste_year_formatted %>%
+  filter(Year %in% c(2006, 2020)) %>%
+  distinct(Type, Year) %>%
+  count(Type, name = "Count")
+
+first_last_waste_type %>% arrange(Count)
+```
+
+To ensure we can calculate most incremented waste type over the year, we need both start (2006) and end (2020) year to compute. We observed that 5 waste types only have either one (2006 or 2020) data, thus would fail to produce a result (end - start) if computation were done. Hence, we need to remove these values before proceeding for computation.
+
+```{R}
+# keep only waste type where Count == 2 (contain Tonnes value for both year 2006 and 2020)
+first_last_waste_type <- first_last_waste_type %>%
+  filter(Count == 2)
+
+first_last_waste_type
+```
+
+Create a new start_end_waste_type from waste_year_formatted where only waste types with Type from first_last_waste_type and Year with 2006 and 2016.
+
+Create new waste_type_increase from start_end_waste_type to have fields for:
+
+- Total_Tonnes = sum of Tonnes from 2006 to 2020
+
+- Start_Tonnes = Tonnes from year 2006 - End_Tonnes = Tonnes from year 2020
+
+- Change = End_Tonnes - Start_Tonnes
+
+```{R}
+waste_type_start_end <- waste_year_formatted %>%
+  filter(
+    Type %in% first_last_waste_type$Type,
+    Year %in% c(2006, 2020)
+  ) %>%
+  group_by(Type, Year) %>%
+  summarise(
+    Total_Waste_Tonnes = sum(Tonnes, na.rm = TRUE),
+  ) %>%
+  ungroup() %>%
+  group_by(Type) %>%
+  summarise(
+    Start_Tonnes = Total_Waste_Tonnes[Year == 2006],
+    End_Tonnes = Total_Waste_Tonnes[Year == 2020],
+    Change = End_Tonnes - Start_Tonnes,
+  ) %>%
+  ungroup()
+
+  
+waste_type_start_end
+```
+
+### Most incremented waste type
+
+To obtain the most incremented waste_type, filter all row to obtain Change that equates to highest changes value of the column.
+
+```{R}
+most_incremented_waste_type <- waste_type_start_end %>%
+  filter(Change == max(Change))
+
+most_incremented_waste_type  
+```
+
+The most incremented waste type over year is **Bricks, concrete and pavers** with an increase of **8345529** Tonnes.
+
+## Q7. Investigate the factors influencing environmental impact scores (EIS)
+
+The waste_year_formatted table contain all join data from Wastes.csv and Year_State_ID.csv, with
+
+### Data Cleaning Core_Non-core
+
+Year representing the start year (eg: 2020 from 2020-2021). The Core_Non-core column is still unclean up to this point.
+
+Observe NA Core_Non-core value.
+
+```{R}
+waste_year_formatted %>% filter(is.na(`Core_Non-core`))
+```
+
+Based on the brief, a core waste comprise of "hazardous waste". As observed, all entries with NA as Core_Non-core are of Category of "Hazardous waste". Hence, we can impute these entries with "Core waste" as the Core_Non-core value.
+
+```{R}
+waste_year_formatted <- waste_year_formatted %>%
+  mutate(
+    `Core_Non-core` = case_when(
+      is.na(`Core_Non-core`) & Category == "Hazardous wastes" ~ "Non-core waste",
+      TRUE ~ `Core_Non-core`
+    )
+  )
+```
+
+### Analyse Environmental Impact Score (EIS)
+
+To analyse the factors influencing EIS, we will be using the previous waste_year_formatted dataset.
+
+```{R}
+glimpse(waste_year_formatted)
+```
+
+### Environmental Impact Score (EIS) distribution
+
+Firstly, we need to identify EIS is continuous or discrete.
+
+```{R}
+waste_year_formatted %>% 
+  count(Env_Impact_Score) %>%
+  arrange(Env_Impact_Score)
+
+```
+
+```{R}
+waste_year_formatted %>% distinct(Env_Impact_Score)
+
+waste_year_formatted %>% 
+  count(Env_Impact_Score) %>%
+  arrange(Env_Impact_Score)
+
+```
+
+Here, we observed the EIS found in in dataset are valid as they all fall within range of 1-10, no NA value is observed. The available Env_Impact_Score with entries are 1, 2, 3, 4, 5, 6, 8 – indicating EIS is discrete. EIS are not distributed uniformly across the scale of 1-10. Instead, we observe how EIS is largely concentrating at 5, 6, 3, 8. Whereas the remaining EIS of 1, 2 and 4 only has less than count of 10. The rest of EIS 7, 9, 10 are not observed.
+
+When we visualize EIS distribution using a bar-chart, we can clearly observe EIS is categorical rather than continuous.
+
+```{R}
+ggplot(waste_year_formatted, aes(x = Env_Impact_Score)) + 
+  geom_bar(fill = "steelblue") + 
+  labs(
+    title = "Distribution of Environmental Impact Scores",
+    x = "Environmental Impact Score",
+    y = "Count"
+  ) +
+  theme_minimal()
+```
+
+### 
+
+### Is Category a factor?
+
+To analyse if Category influence EIS, we first compute the statistical information of EIS for each Category.
+
+```{R}
+category_summary_table <- waste_year_formatted %>%
+  group_by(Category) %>%
+  summarise(
+    Mean_EIS = mean(Env_Impact_Score, na.rm = TRUE),
+    SD_EIS = sd(Env_Impact_Score, na.rm = TRUE),
+    Total_Count = n(),
+    Min = min(Env_Impact_Score, na.rm = TRUE),
+    First_Quartile = quantile(Env_Impact_Score, 0.25, na.rm = TRUE),
+    Median = median(Env_Impact_Score, na.rm = TRUE),
+    Third_Quartile = quantile(Env_Impact_Score, 0.75, na.rm = TRUE),
+    Max = max(Env_Impact_Score, na.rm = TRUE)
+  ) %>% ungroup()
+
+category_summary_table %>% arrange(Mean_EIS)
+```
+
+From the category_summary_table above, we realised some category has same min, first quartile, median, third quartile or max falling on the same count. If a boxplot is used itslef will collapse into a flat line, visually uninformative since it hides how many observation at the value. Hence, we visualize them using a boxplot with violin plot to ensure count can be reflected at region of collapse flat line of boxplot, with x-axis as Mean_EIS and y-axis as category.
+
+```{R}
+ggplot(waste_year_formatted, 
+       aes(x = reorder(Category, Env_Impact_Score, median), y = Env_Impact_Score)) +
+  geom_violin(fill = "steelblue", alpha = 0.5) +
+  geom_boxplot(width = 0.2, fill = "white") +
+  coord_flip() +
+  labs(
+    title = "Distribution of Environmental Impact Score by Category",
+    x = "Category",
+    y = "Env Impact Score"
+  ) +
+  theme_minimal()
+
+```
+
+From the category_summary_table and plot, we observed that:
+
+1.  Metals has highest Mean_EIS of 6.697350. The boxplot shows Metals waste are more right skewed, meaning its waste process positively affects the environment.
+2.  Others category such as Ash, Paper & cardboard, Building & demolition materials and Plastics also have relatively high mean above 6 and right skewed.
+3.  Organics has lowest Mean_EIS of 4.854498. The boxplot is entirely unvisible because its first quartile, median and third quartile falls under the same value, indicating Organics is less spread but instead heavily concentrate at a single value of 5.
+4.  Overall, the plots suggest that Category of waste does influence the EIS. But we also need to consider that each category group size are very contrast, with highest count recording 28057 for hazardous waste and lowest 125 for Ash.
+
+### Is Stream a factor?
+
+To analyse if Stream influence EIS, we will observe the statistical information of each Stream.
+
+```{R}
+stream_summary_table <- waste_year_formatted %>%
+  group_by(Stream) %>%
+  summarise(
+    Mean_EIS = mean(Env_Impact_Score, na.rm = TRUE),
+    SD_EIS = sd(Env_Impact_Score, na.rm = TRUE),
+    Total_Count = n(),
+    Min = min(Env_Impact_Score, na.rm = TRUE),
+    First_Quartile = quantile(Env_Impact_Score, 0.25, na.rm = TRUE),
+    Median = median(Env_Impact_Score, na.rm = TRUE),
+    Third_Quartile = quantile(Env_Impact_Score, 0.75, na.rm = TRUE),
+    Max = max(Env_Impact_Score, na.rm = TRUE)
+  )
+
+stream_summary_table %>% arrange(Mean_EIS)
+```
+
+It is observed that their Mean_EIS is very closed to one another with C&I with 5.216365, C&D with 5.429679 and MSW with 5.609047. Something in common is all 3 stream have the same median of 5, suggesting a violinplot boxplot will be optimal as it shows similar bimodal shapes to visualise how frequency is spread across all 3 streams.
+
+```{R}
+ggplot(waste_year_formatted, aes(x = reorder(Stream, Env_Impact_Score, median), y = Env_Impact_Score)) +
+  geom_violin(fill = "steelblue", alpha = 0.6) +
+  geom_boxplot(width = 0.2, fill = "white") +
+  coord_flip() +
+  labs(
+    title = "Distribution of Env Impact Score by Stream",
+    x = "Stream",
+    y = "Env Impact Score"
+  ) +
+  theme_minimal()
+```
+
+From the stream_summary_table and boxplot violinplot, we observe that:
+
+1.  Huge proportion of MSW waste receive EIS of 5 and above as density is heavier at the range of EIS \>= 5.
+2.  C&I is distributed across EIS of 3, 5, 6 and 8, with a median of 5. A wider spread is observed at lower EIS (\< 5) compared to higher EIS (\> 5).
+3.  C&D has majority distribution of EIS = 5 and 6.
+4.  Overall, the mean of all 3 Stream do not differ significantly, it suggest that Stream alone is not very influential over any variation on EIS.
+
+### Is Fate a factor?
+
+To analyse if Fate influence EIS, we will observe the statistical information of Fate.
+
+```{R}
+summary_fate_table <- waste_year_formatted %>%
+  group_by(Fate) %>%
+  summarise(
+    Mean_EIS = mean(Env_Impact_Score, na.rm = TRUE),
+    SD_EIS = sd(Env_Impact_Score, na.rm = TRUE),
+    Total_Count = n(),
+    Min = min(Env_Impact_Score, na.rm = TRUE),
+    First_Quartile = quantile(Env_Impact_Score, 0.25, na.rm = TRUE),
+    Median = median(Env_Impact_Score, na.rm = TRUE),
+    Third_Quartile = quantile(Env_Impact_Score, 0.75, na.rm = TRUE),
+    Max = max(Env_Impact_Score, na.rm = TRUE)
+) %>% arrange(Mean_EIS)
+
+summary_fate_table
+```
+
+From the summary_fate_table above, we observe that Energy recovery, Long-term storage and Waste reuse has standard deviation of 0, meaning all data points in these set are identical and does not spread out of the Mean_EIS of 5.
+
+```{R}
+ggplot(
+  waste_year_formatted,
+  aes(
+    x = Fate,
+    y = Env_Impact_Score
+  )
+) +
+  geom_violin(fill = "steelblue", alpha = 0.6) +
+  geom_boxplot(width = 0.4, fill = "white") +
+  coord_flip() +
+  labs(
+    title = "Environmental impact score by fate",
+    x = "Waste fate",
+    y = "Environmental impact score"
+  ) +
+  theme_minimal()
+```
+
+From the fate_summary_table and boxplot violinplot, we observe that:
+
+1.  Recycling has highest Mean_EIS of 6.179202 with variation distributed at 5 and 8. This signifies the waste process that results in recycling fate is very likely to positively affects the environment.
+2.  Energy recovery, Long-term storage and Waste with Mean_EIS of 5 have boxplot collapsed into a single line, meaning they concentrate completely at 5
+3.  Disposal has lowest Mean_EIS of 4.745634 even though its median is 6, which is the highest from all 5 fates. This is because majority of disposal receive an EIS below the median, resulting it to be left-skewed.
+4.  Overall, Fate is a factor influencing EIS. But we need to consider that the current dataset is underpresented for Long-term storage and Waste reuse, hence would require a more careful interpretation.
+
+### Is Core_Non-core a factor?
+
+To analyse if Core_Non-core influence EIS, we will observe the statistical information of Core_Non-core.
+
+```{R}
+core_summary_table <- waste_year_formatted %>%
+  group_by(`Core_Non-core`) %>%
+  summarise(
+    Mean_EIS = mean(Env_Impact_Score, na.rm = TRUE),
+    SD_EIS = sd(Env_Impact_Score, na.rm = TRUE),
+    Total_Count = n(),
+    Min = min(Env_Impact_Score, na.rm = TRUE),
+    First_Quartile = quantile(Env_Impact_Score, 0.25, na.rm = TRUE),
+    Median = median(Env_Impact_Score, na.rm = TRUE),
+    Third_Quartile = quantile(Env_Impact_Score, 0.75, na.rm = TRUE),
+    Max = max(Env_Impact_Score, na.rm = TRUE),
+    Mean = mean(Env_Impact_Score)
+) %>% arrange(Mean_EIS)
+
+core_summary_table
+```
+
+To visualise the distribution, a boxplot is created.
+
+```{R}
+ggplot(waste_year_formatted, aes(x = `Core_Non-core`, y = Env_Impact_Score)) +
+  geom_boxplot(fill = "steelblue") +
+  labs(
+    title = "Env Impact Score by Core/Non-core Waste",
+    x = "Core_Non-core",
+    y = "Env Impact Score"
+  ) +
+  theme_minimal()
+```
+
+From core_summary_table and boxplot, we observe:
+
+1.  The mean for Non-core waste (5.942446) is slightly higher than Core-waste (5.340673) although both have same median of 5.
+2.  Both Core waste and Non-core waste are right skewed. Non-core shows a stronger degree of positive skew than Core.
+3.  A contrasting observation is total count of Non-core waste is very low compared to Core waste, indicating the dataset is lacking in Non-core waste entries.
+4.  Overall, due to the contrasting in count of the 2 core-non core category, the difference in mean itself is not strong enough to justify Core_Non-core as a factor on EIS.
+
+### Is economic growth a factor?
+
+To analyse, we first create a new state_econ_score_summary table that computes the Mean_EIS, grouped by state and year.
+
+```{R}
+state_econ_score_summary <- waste_year_formatted %>%
+  group_by(Year, State, Economic_Growth) %>%
+  summarise(
+    # mean EIS by state and year
+    Mean_EIS = mean(Env_Impact_Score, na.rm = TRUE),
+    Count = n()
+  )
+
+state_econ_score_summary
+```
+
+We plot a scatterplot with a linear regression line to show the relationship between EIS and economic growth (x-axis as economic growth percentage and y-axis as mean EIS)
+
+```{R}
+ggplot(state_econ_score_summary,
+       aes(x = Economic_Growth,
+           y = Mean_EIS)) +
+  geom_smooth(method = "lm", se = FALSE) +
+  geom_point() +
+  labs(
+    title = "Mean Environmental Impact Score against Economic Growth",
+    x = "Economic Growth",
+    y = "Mean EIS"
+  ) +
+  theme_minimal()
+
+
+```
+
+Here, we observed that:
+
+- Shows a negative trend, indicating as economic growth increases, mean EIS decreases.
+
+- However, the scattered dots does not show a clear trend as the fitted trendline as dots are dispersed randomly all across the plot.
+
+To analyse the strength of correlation between mean EIS and economic growth, we carry out a Pearson correlation test since both economic growth and mean EIS are both continous quantitative variables.
+
+```{R}
+r <- cor(state_econ_score_summary$Economic_Growth, state_econ_score_summary$Mean_EIS, method = "pearson")
+r
+```
+
+The r value obtained is negative (-0.1774929), indicating a weak correlation between mean EIS and economic growth. Therefore, economic growth per state-year is not as influential on environmental impact score compared to previously analysed factor (Fate, Stream, Category).
+
+### Overall model fit
+
+```{R}
+model <- lm(
+  Env_Impact_Score ~ 
+    Fate +
+    Stream +
+    Category +
+    `Core_Non-core`,
+  data = waste_year_formatted
+)
+
+summary(model)
+```
+
+Based on the missing output drop as the implicit baseline:
+
+- Fate baseline = Disposal
+
+- Stream baseline = C&D
+
+- Category baseline = Ash
+
+- Core_Non-core baseline = Core waste
+
+- State baseline = ACT
+
+Whole model together explains 23.2% of variance in EIS. Hence, even though aspect (Fate, Stream, Category, Core_Non-core, Economic growth) have some relationship with EIS, a great portion of the EIS is still unexplained by these aspect.
+
+Overall it shows factor-to-factor interpretation:
+
+1.  Fate is the strongest factor on EIS after controlling other variable. Recycling is the biggest driver to a more positive EIS, followed by energy recover, long-term storage, waste reuse and disposal (baseline).
+
+2.  Stream has the second strongest factor on EIS after controlling other variable, with C&I leading to more positive EIS, followed by MSW and C&D (baseline).
+
+3.  Category is next. Several categories remain significant even after controlling other variable. For exmaple, Organics, Unclassified materials, Textiles, Building & demolition, Hazardous wastes, Paper & cardboard, Biosolids. But a few are no longer significant, such as Metals, Plastics and Glass. This informs that category univariate effect was not purely a proxy for Fate, some categories have their own independent association with EIS, but not all of them.
+
+4.  Core_Non-core is the most insignificant factor on EIS, even after controlling other variables.
+
+## Q8. Disposal size variation and disposal frequency of each state
+
+In previous task, Tonnes in waste_year_formatted is already cleaned. Hence, no additional data cleaning required.
+
+### Observe tyres disposal
+
+First, we observe waste entries with Type of "Tyres (T140)" and Fate of "Disposal". We need to observe the number of entries and Tonnes values to determine a suitable tonnes_range.
+
+```{R}
+tyre_disposal <- waste_year_formatted %>% 
+  filter(
+    Type == "Tyres (T140)",
+    Fate == "Disposal",
+  ) %>%
+  arrange()
+
+tyre_disposal %>% select(Type, Fate, Tonnes) %>% arrange(Tonnes)
+```
+
+We consider disposal with tonnes \> 0 as actual meaningful disposal, thus, we will drop of tyres disposal with zero-tonnes for analysis.
+
+```{R}
+tyre_disposal <- tyre_disposal %>% filter(Tonnes > 0)
+
+tyre_disposal %>% select(Type, Fate, Tonnes) %>% arrange(Tonnes)
+```
+
+### Categorization of Tonnes range
+
+Now, we check the summary of Tonnes column in tyre_disposal (min, q1, median, q3, max)
+
+```{R}
+summary(tyre_disposal$Tonnes)
+```
+
+We observe that median (6211) is lower than mean (21201), closer to first quartile (2088) compared to third quartile (45607). Thus, a euqal-interval binning appraoch is unsuitable. Instead, we will use a non-linear interval for determing tonnes_range variable.
+
+To decide on range, we first observe some sensible breakpoints:
+
+```{R}
+tyre_disposal %>%
+  filter(Tonnes > 0) %>%
+  pull(Tonnes) %>%
+  quantile(probs = c(
+    0, 
+    0.25, 
+    0.5, 
+    0.75, 
+    0.9, 
+    0.95, 
+    1
+  ))
+```
+
+Now, we can decide on Tonnes_ranges with values:
+
+- 0-500
+
+- 500-5000
+
+- 5000-10000
+
+- 10000-50000
+
+- 50000+
+
+We update the tyre_disposal table by mutating a new Tonnes_range column and apply case_when to determine each waste Tonnes_range category.
+
+```{R}
+tyre_disposal <- tyre_disposal %>%
+  mutate(
+    Tonnes_Range = case_when(
+      Tonnes > 0  & Tonnes <= 500 ~ "0-500",
+      Tonnes > 500 & Tonnes <= 5000 ~ "500-5000",
+      Tonnes > 5000 & Tonnes <= 10000 ~ "5000-10000",
+      Tonnes > 1000 & Tonnes <= 50000 ~ "10000-50000",
+      Tonnes > 50000 ~ "50000+"
+    )
+  )
+
+tyre_disposal
+```
+
+Now that tyre_disposal table has each waste categorised into respective Tonnes_range, we can create a new tonnes_state table that group by each State and Tonnes_range to obtain the frequency of each Tonnes_Range by state.
+
+```{R}
+tonnes_state <- tyre_disposal %>%
+  group_by(State, Tonnes_Range) %>%
+  summarise(
+    Frequency = n()
+  ) %>%
+  ungroup()
+
+tonnes_state
+```
+
+To visualize the frequency of each Tonnes_range by state, a stacked barchart is used. A bar chart is used over boxplot or histogram so that manger can compare categorical states against each other on 2 aspect (tyre disposal frequency and tonnes range). Stacking bars show both aspect without requiring manager to read multiple distribution plots per state.
+
+```{R}
+ggplot(tonnes_state, aes(x = reorder(State, Frequency, sum), y = Frequency, fill = Tonnes_Range)) +
+  geom_col(position = "stack") +
+  coord_flip() +
+  scale_fill_manual(values = c(
+    "0-500" = "#FFF7BC", # light shade for less significant disposal
+    "500-5000"             = "#FEE391",
+    "5000-10000"         = "#FEC44F",
+    "10000-50000"      = "#D95F0E",
+    "50000+"           = "#993404" # darker shade to highlight highest tonnes range
+  )) +
+  labs(
+    title = "Number of Tyre Disposal Cases and Size Distribution by State",
+    x = "State",
+    y = "Number of Tyre Disposal Cases",
+    fill = "Tonnes Range"
+  ) +
+  theme_minimal()
+```
+
+From the bar chart, it tells the manager:
+
+1.  State with higher number of disposal cases represented by darker shade (eg: 50000+) are great state for investing in large-scale processing capacity. It show a pattern of large, sustained disposal events, meaning large-scale processing infrastructure built there is more likely to have a consistent supply of substantial waste volumes to process.
+2.  State with disposal cases higher number of disposal cases represented by lighter bins (eg: 0-500, 500-5000) suggest many small disposal event, justifying it is not suitable for large infrastructure investment in these states. Large-scale infrastructure being built there risks being underutilized, since there is no consistent stream of high-volume disposal to justify.
+3.  VIC, NSW, QLD and WA are best candidates state to invest for large-scale tyres processing capacity due to higher volume of disposal event happening at range of 50000+. This suggestion is based on disposal volume and consistency alone. The final investment decisions would also need to weight factors outside this dataset, such as transport, logistics, existing infrastructure and labour costs.
+
+## Q9 Factor influencing yearly trend of total C&D waste tones
+
+### External dataset from ABS_Population.xlsx
+
+Australia Bureau of Statistics, Population Size and Growth: <https://www.abs.gov.au/statistics/people/population/historical-population/latest-release#data-downloads>
+
+```{R}
+# dataset is downloaded and renamed to ABS_Population.xlsx
+# read from ABS_Population.xlsx, skip the first 4 row (headers)
+population <- read_excel("data/ABS_Population.xlsx", skip = 4)
+population
+```
+
+### Data cleaning external dataset
+
+We observed the original dataset consist on each year from 1902-2021 as individual column. We filter only relevant years, which are 2006-2020, matching the Waste.csv and Year_State_ID.csv.
+
+```{R}
+population <- population %>% 
+  select(Sex, `State/Territory`, `2006`:`2020`) %>% 
+  arrange(`State/Territory`) 
+
+population
+```
+
+We have some info about the State/Territory value.
+
+1.  State/Territory of "Australia(e)" refers the the total amount of Male, Female and overall for each year across the entire nation.
+2.  State/Territory with NA have entire rows being NA, except Sex, which indicates the NA is a result from header.
+3.  State/Territory have mixture of upper and lowercase.
+
+We can replace the State/Territory values to match our waste_year_formatted.
+
+```{R}
+# view how state are formatted in waste_year_formatted
+waste_year_formatted %>% distinct(State)
+
+# view how State/Territory are formatted in population
+population %>% distinct(`State/Territory`)
+```
+
+We capitalized and abbreviate all State/Territory values in population using recode(), replace "Australia(e)" with a meaningful name using case_when() and finally drop off all NA values .
+
+```{R}
+
+population_formatted <- population %>%
+  mutate(
+    `State/Territory` = recode(
+      `State/Territory`,
+      "Vic." = "VIC",
+      "Qld" = "QLD",
+      "Tas." = "TAS",
+      "ACT(d)" = "ACT"
+    ),
+    `State/Territory` = case_when(
+      `State/Territory` == "Australia(e)" & Sex == "Male" ~ "Total Male",
+      `State/Territory` == "Australia(e)" & Sex == "Female" ~ "Total Female",
+      `State/Territory` == "Australia(e)" & Sex == "Person" ~ "Total Population",
+      TRUE ~ `State/Territory`
+    )
+  ) %>%
+  filter(!is.na(`State/Territory`)) %>%
+  arrange(`State/Territory`)
+
+```
+
+Now, observe population_formatted and waste_year_formatted State or State/Territory have been standardized, with population_formatted having additional "Total Female", "Total Male" and "Total Population".
+
+```{R}
+# view how state are formatted in waste_year_formatted
+waste_year_formatted %>% distinct(State)
+```
+
+```{R}
+# view how State/Territory are formatted in population_formatted with additional "Total Female", "Total Male" and "Total Population"
+population_formatted %>% distinct(`State/Territory`)
+```
+
+### Filtering C&D waste from waste_year_formatted
+
+We are only interested in C&D (Construction and Demolition) Stream waste. So we filter and save these waste in cnd_waste table. Since waste_year_formatted have been cleaned in previous tasks, hence no additional cleaning required here.
+
+```{R}
+cnd_waste <- waste_year_formatted %>%
+  filter(Stream == "C&D") %>%
+  select(-c("Description", "start", "end"))
+
+cnd_waste 
+```
+
+Then, we obtain the total C&D tonnes of each state in each year by grouping into State and Year, sum up Tonnes. Save it into a new cnd_state table.
+
+```{R}
+cnd_state <- cnd_waste %>%
+  group_by(State, Year) %>%
+  summarise(
+    Total_CND_Tonnes = sum(Tonnes)
+  ) 
+
+cnd_state %>% arrange(Year)
+```
+
+### Joining cnd_state and population_formatted
+
+Before joining the 2 table, we observe the pattern of both tables.
+
+```{R}
+population_formatted %>% head()
+```
+
+We observe in population_formatted, we have columns of:
+
+- Sex: Male, Female, Person
+
+- State/Territory: repeating capitalized abbreviated state name for 3 times due to each row representing Male, Female and Person.
+
+- 2006 to 2020: each value indicating total male, total female and total population of the respective year
+
+```{R}
+cnd_state %>% head(20)
+```
+
+We observe in cnd_state we have columns of:
+
+- State: non-repeating capitalized abbreviated state name for each year
+
+- Year: 2006-2020
+
+- Total_CND_Tonnes: sum of tonnes produced by respective state by year
+
+We need to reshape population_formatted to match cnd_waste. We do this by pivot_longer() to make each individual year column as a value under a single Year column. Then pivot_wider() to create new Total_Male, Total_Female and Total_Population columns after renaming.
+
+```{R}
+population_reshaped <- population_formatted %>%
+  # convert individual 2006-2020 column into single Year column
+  pivot_longer(
+    cols = `2006`:`2020`,
+    names_to = "Year",
+    values_to = "Population"
+  ) %>%
+  # convert to Year to integer
+  mutate(
+    Year = as.integer(Year)
+  ) %>%
+  # rename State/Territory for consistency 
+  rename(State = `State/Territory`) %>%
+  # convert Population to individual sex-specific population column
+  pivot_wider(
+    names_from = Sex,
+    values_from = Population 
+  ) %>%
+  rename(
+    Total_Male = Male,
+    Total_Female = Female,
+    Total_Population = Person
+  )
+
+population_reshaped
+```
+
+Now, we left join cnd_state to population_reshaped by Year and State.
+
+```{R}
+cnd_population <- cnd_state %>%
+  left_join(
+    population_reshaped,
+    by = c("Year", "State")
+  )
+
+cnd_population
+```
+
+### Correlation between total population and total C&D waste tonnes.
+
+Population and C&D tonnes are both continuous variable, hence we will use Pearson correlation coefficient analyse the strength and direction.
+
+```{R}
+# Pearson correlation coefficient
+r <- cor(cnd_population$Total_Population, cnd_population$Total_CND_Tonnes, method = "pearson")
+r
+
+# coefficient of determination = R^2
+r_squared <- r^2
+r_squared
+```
+
+Pearson correlation analysis yielded a moderate-to-strong positive linear correlation (0.6368048) between total population and C&D waste tonnage. This confirms that regional population scale is a major structural driver of construction waste tonnes. However, because population accounts for approximately 41% of total variance, macro-economic conditions and local waste management policies also play substantial roles in determining annual C&D waste generation.
+
+### Visualisation
+
+To determine if population size directly affect C&D Tonnes disposal, a scatterplot and linear trendline is used. X-axis represent total population, y-axis represent total C&D tonnes, each point is shaped uniquely according to state.
+
+Scatterplot and trendline is used because:
+
+1.  It reveals the relationship, stength and direction between the 2 continuous variables (total population, C&D waste tonnes).
+2.  Trendline shows the general trend across data points.
+
+```{R}
+
+ggplot(cnd_population, 
+       aes(x = Total_Population, y = Total_CND_Tonnes)) +
+  geom_point(
+    aes(color = Year, shape = State), size = 3, alpha = 0.8) +
+  geom_smooth(
+    method = "lm", 
+    se = FALSE, 
+    color = "black", 
+    linetype = "dashed") +
+  scale_color_viridis_c() +
+  scale_shape_manual(
+    values = c(0, 1, 2, 3, 4, 5, 6, 8)
+  ) +
+  scale_x_continuous(
+    labels = scales::comma
+  ) +
+  labs(
+    title = "Relationship Between Population and CND Waste (2006–2020)",
+    x = "Total Population", 
+    y = "Total CND Waste (Tonnes)",
+    color = "Year", 
+    shape = "State"
+  ) +
+  theme_minimal()
+```
+
+From the scatterplot, we observe that:
+
+- Trendline shows a positive linear relationship between total C&D tonnes and population. States and years with population proportionally generates lower C&D waste tonnes; whereas states and years with higher population increases C&D waste tonnes.
+
+- Generate the hypothesis that the underlying reason can be when population increases, more housing and facility will need to be constructed to support the community, resulting in higher disposal of C&D due to higher construction activity.
+
+Overall, by investigating external dataset on Australia states population across the year, we obtained the result that population has a strong individual relationship to yearly trend of total C&D waste tonnes. This is supported by Pearson correlation analysis and scatterplot.
+
+### 
