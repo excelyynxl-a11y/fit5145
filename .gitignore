@@ -1,0 +1,10 @@
+# History files
+.Rhistory
+.Rapp.history
+
+# Session data files
+.RData
+.RDataTmp
+
+# User-specific project settings (The main metadata culprit)
+.Rproj.user/
