@@ -14,7 +14,7 @@ I used Claude for initial idea feedback, dataset recommendations and writing imp
 
 # FIT5145 Assignment 1
 
-## Predicting Late-Race Running Slowdown in HYROX Men’s Open 
+## Predicting Late-Race Running Slowdown in HYROX 
 
 Name: Lim Excelyynx   
 Student ID: 34476245
@@ -23,7 +23,7 @@ Student ID: 34476245
 
 HYROX alternates eight 1 km runs with eight functional stations, is one of the fastest-growing participation sports globally, seeing athletes rising from 570000 in 2024/25 season to 1.5 million in 2025/26 (SportsPro, 2026). This project asks whether information available immediately after Station 4 can predict subsequent running slowdown, rather than merely benchmark a completed race.
 
-The analytical population are Individual Open finishers from completed in the 2025/26 season with valid run and station splits time. One observation represents one athlete-race across all stations. 
+The analytical population are Individual Pro finishers from completed in the 2025/26 season with valid run and station splits time. One observation represents one athlete-race across all stations. 
  
 The goals are to describe pacing variation, test whether early station information improves predictions beyond running splits alone and produce an uncertainty corridor for later running time that coaches can interpret.
 
@@ -59,7 +59,7 @@ For gyms, replaying race trajectories could make debriefs more specific and redu
 
 The proposed model is business-to-business analytics-as-a-service, transforming historical results into decision support rather than reselling raw athlete records. HYROX supplies the underlying results, coaches and affiliated gyms are prospective subscription customers, athletes receive interpreted forecasts. Revenue would fund data maintenance, validation and dashboard support. Demand and willingness to pay require testing.
 
-The primary source is the official results web-scrapped from the HYROX All Time Ranking Official Website with the use of Python web-scrapping script from an open-source tool (GitHub imterence/github_analysis repository). The web-scrapper will be used to scrap Hyrox Male Open and Female Open dataset and save as CSV. The raw dataset includes Name, City, Age Group, All workout times (Running 1-4, SkiErg, Sled Push/Pull, etc.), Total time and Ranking.
+The primary source is the official results web-scrapped from the HYROX All Time Ranking Official Website with the use of Python web-scrapping script from an open-source tool (GitHub imterence/github_analysis repository). The web-scrapper will be used to scrap Hyrox Male Pro and Female Pro dataset and save as CSV. The raw dataset includes Name, City, Age Group, All workout times (Running 1-4, SkiErg, Sled Push/Pull, etc.), Total time and Ranking.
 
 Initially, an R-based prototype will replay historical races, hiding all information after Station 4. A future service would receive timestamped splits from a licensed timing feed or consented manual input, calculate features and return a forecast corridor to a coach dashboard. Public results access does not establish live-feed availability. Race-day use requires latency testing, permission and prospective validation, the prototype promises none of these.
 
@@ -73,6 +73,47 @@ Evaluation will hold out whole events, remove training records of identifiable t
 #### 3.3 Challenges
 
 Missing or misassigned splits, penalties, transition timing and venue layouts can distort apparent slowing. Audit records, document exclusions and test sensitivity to anomalous runs. Missing outcomes are impossible to be imputed, hence can only be dropped off. Shared denominators can inflate apparent associations, so also evaluate predictions of absolute later running time.
+
+### 4.0 Characterising and Analysing Data
+
+#### 4.1 Potential Data Source, Characteristics, Required Softwares, Platform and Tools
+
+1. Hyrox All Time Ranking Official Website (scrap hyrox_season8_male_pro.csv and hyrox_season8_female_pro.csv using python web-scrapper from GitHub - imterence/hyrox_analysis (2025))
+- 4V ?
+- VSCode to scrape, Git Version Control to clone web-scraper repository from GitHub, Python, RStudio to analyse csv
+
+2. Hyrox Race Result Dataset from Season 4 -6 (JGUG, 2024) downloaded from Kaggle.
+- 4V ?
+- Kaggle account to download dataset, RStudio to analyse csv
+
+3. Hyrox Result API Platform. Querying the live, protected API endpoints requires an account, a bearer token, and a paid active subscription.
+- 4V ?
+- Requries an active subscription
+- SwaggerUi to explore, retrieve data from endpoints
+- Ideal to be chosen if project expand where live or a more updated dataset is constant required so dont have to rescrape or redownload new dataset from time to time.
+
+#### 4.2 Data Analysis Approach
+- Overall process
+- Technical and Statistical Method
+
+### 5.0 Demonstration
+#### 5.1 Chosen Dataset
+Hyrox All Time Ranking Official Website (scrap hyrox_season8_male_pro.csv and hyrox_season8_female_pro.csv using python web-scrapper from GitHub - imterence/hyrox_analysis (2025))
+- Use VSCode, clone repo, create and run scrape_male_pro.py to extract hyrox_season8_male_pro.csv, create and run scrape_female_pro.py to extract hyrox_season8_female_pro.csv 
+- In RStudio, clean data, create geom_line / geom_point to show time degradation across each station, differing by gender.
+- Using only first half of the race result, produce a model that predict the closest prediction to the next half race.
+- Display the actual whole race and predictive model to see accuracy.
+
+#### 5.2 Analysis Process
+* from R
+
+#### 5.3 Analysis Results
+* from R
+
+### 6.0 Standard for Data Science Process, Data Governance and Management
+
+
+
 
 ### Reference
 SportsPro. (2026). How Hyrox is turning fitness into the world's next mass participation sport.
@@ -95,3 +136,11 @@ https://www.medrxiv.org/content/10.64898/2026.08.09.26359590v1
 
 Bauerfeind. HYROX injury | Common problems, causes & prevention.
 https://www.bauerfeind-sports.com/hyrox-injuries/
+
+HYROX All Time Ranking Official Website
+https://results.hyrox.com/season-8/?page=2695&event=HPRO_HYROXOVERALL&pid=list_overall&pidp=ranking_nav&search%5Bsex%5D=M
+
+JGUG. (2024). Hyrox Race Results Dataset [hyrox_results.csv]. Kaggle.
+https://www.kaggle.com/datasets/jgug05/hyrox-results
+
+API, H. R. (2025). Hyrox Result API. Hyrox Result API. https://hyroxresultapi.com/
