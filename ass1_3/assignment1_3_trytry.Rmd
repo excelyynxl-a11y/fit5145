@@ -10,32 +10,114 @@ date: "2026-08-26"
 
 ```{R}
 library(tidyverse)
+library(lubridate)
 ```
 
 ```{R}
 szn8_male_pro <- read_csv("data/hyrox_season8_male_pro.csv")
 glimpse(szn8_male_pro)
 szn8_male_pro %>% distinct(Division)
-szn8_male_pro %>% filter(is.na(Division))
 szn8_male_pro %>% head(10)
 ```
 
 ```{R}
 szn8_female_pro <- read_csv("data/hyrox_season8_female_pro.csv")
-
+glimpse(szn8_female_pro)
+szn8_female_pro %>% distinct(Division)
 szn8_female_pro %>% head(10)
 ```
 
-## 
+## Data cleaning
+
+### Inspect szn8_male_pro
+
+Check for any NA values
 
 ```{R}
-
+szn8_male_pro %>% filter(if_any(everything(), is.na))
 ```
 
-## 
+We observed 10 rows contain NA values. Since only a small fraction (10 out of 12500 rows) of cases have several missings, we will drop these cases.
+
+Check distinct City.
 
 ```{R}
+szn8_male_pro %>% group_by(City) %>% summarise(count = n())
+```
 
+We observe the oddness that all City are recorded as "N/A" as characters instead of true NA values. Since City is totally missing for all entries and does not carry significance to the analysis, we will drop the City variable.
+
+Check distinct Division.
+
+```{R}
+szn8_male_pro %>% group_by(Division) %>% summarise(count = n())
+```
+
+We observe that all athletes are HYROX PRO Division (ignore NA since it will be dropped later), which is correct based on our project scope.
+
+Check distinct Age_Group.
+
+```{R}
+szn8_male_pro %>% group_by(Age_Group) %>% summarise(count = n())
+```
+
+We observe 235 data has an odd "Unknown" Age_Group. Since there is no other related variable that hints us to the true atheletes Age_Group, cases with "Unknown" Age_Group will be dropped.
+
+Check Roxzone_Time.
+
+```{R}
+szn8_male_pro %>% group_by(Roxzone_Time) %>% summarise(count = n()) %>% arrange(desc(Roxzone_Time))
+```
+
+We observe 726 odd "N/A" as characters instead of true NA values. Since we know Roxzone_Time refers to transition time between each station, we can impute Roxzone_Time with the following formula: Roxzone_Time = Total_Time - each individual station time
+
+Based on all inspection made, we will now clean szn8_male_pro and saved into a new male_pro_clean.
+
+```{R}
+male_pro_clean <- szn8_male_pro %>%
+  # drop all NA cases
+  filter(!if_any(everything(), is.na)) %>%
+  # deselect City column
+  select(- City) %>%
+  # drop cases with Unknown Age_Group
+  filter(Age_Group != "Unknown") %>%
+  # impute Roxzone_Time
+  mutate(
+    total_sec = period_to_seconds(hms(Total_Time)),
+    
+    splits_sec = 
+      period_to_seconds(hms(Running_1)) + 
+      period_to_seconds(hms(Running_2)) + 
+      period_to_seconds(hms(Running_3)) + 
+      period_to_seconds(hms(Running_4)) + 
+      period_to_seconds(hms(Running_5)) + 
+      period_to_seconds(hms(Running_6)) + 
+      period_to_seconds(hms(Running_7)) + 
+      period_to_seconds(hms(Running_8)) + 
+      period_to_seconds(hms(SkiErg_1000m)) + 
+      period_to_seconds(hms(Sled_Push_50m)) + 
+      period_to_seconds(hms(Sled_Pull_50m)) + 
+      period_to_seconds(hms(Burpee_Broad_Jump_80m)) + 
+      period_to_seconds(hms(Row_1000m)) + 
+      period_to_seconds(hms(Farmers_Carry_200m)) + 
+      period_to_seconds(hms(Sandbag_Lunges_100m)) + 
+      period_to_seconds(hms(Wall_Balls)),
+    
+    roxzone_sec = total_sec - splits_sec,
+    
+    Roxzone_Time = hms::hms(roxzone_sec)
+  ) %>%
+  select(-total_sec, -splits_sec, -roxzone_sec) %>%
+  filter(as.numeric(Roxzone_Time) > 0)
+  
+
+male_pro_clean
+```
+
+Inspect szn8_female_pro
+
+```{R}
+szn8_female_pro %>% filter(if_any(everything(), is.na))
 ```
 
 ## 
