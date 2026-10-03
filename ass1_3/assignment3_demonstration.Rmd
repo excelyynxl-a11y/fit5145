@@ -13,8 +13,6 @@ In this demonstration, the datasets are obtained by websracping and saved into c
 
 - hyrox_season8_male_pro.csv
 
-- hyrox_season8_female_pro.csv
-
 These datasets has been published to excelyynxl-a11 GitHub repository (link: <https://github.com/excelyynxl-a11y/fit5145/tree/main/ass1_3>). You can download the csv files and saved them into a data folder to carry out this demonstration.
 
 ## Load library
@@ -22,6 +20,7 @@ These datasets has been published to excelyynxl-a11 GitHub repository (link: <ht
 ```{R}
 library(tidyverse)
 library(lubridate)
+library(hms)
 ```
 
 ## Load dataset
@@ -31,37 +30,59 @@ szn8_male_pro <- read_csv("data/hyrox_season8_male_pro.csv")
 glimpse(szn8_male_pro)
 ```
 
-```{R}
-szn8_female_pro <- read_csv("data/hyrox_season8_female_pro.csv")
-glimpse(szn8_female_pro)
-```
-
 ## Data cleaning
 
-For our demonstration and analysis scope, the only field required are:
-
-- Time split of each of the 16 stations:
-
-- Total time:
-
-- Division: MALE HYROX PRO or FEMALE HYROX PRO
-
-Hence, data cleaning will not discard "dirty". For instance, although Age_Group contains "Unknown” or Roxzone is “N/A”, since neither is needed for the demonstration descriptive or predictive analysis, we will not attempt to "clean" or impute these values.
-
 ### Inspect szn8_male_pro
+
+Convert all time split into \<time\> format
+
+```{R}
+# Define all split columns
+run_cols <- paste0("Running_", 1:8)
+station_cols <- c(
+  "SkiErg_1000m", 
+  "Sled_Push_50m", 
+  "Sled_Pull_50m",
+  "Burpee_Broad_Jump_80m", 
+  "Row_1000m", 
+  "Farmers_Carry_200m",
+  "Sandbag_Lunges_100m", 
+  "Wall_Balls"
+)
+all_time_cols <- c("Total_Time", "Roxzone_Time", run_cols, station_cols)
+
+```
+
+```{R}
+# Standardize all time columns to strict <time> (hms class)
+time_fomatted_male <- szn8_male_pro %>%
+  mutate(
+    across(
+      all_of(all_time_cols),
+      ~ if (inherits(.x, "hms") || inherits(.x, "difftime")) {
+          hms::as_hms(as.numeric(.x))
+        } else {
+          hms::as_hms(period_to_seconds(lubridate::hms(as.character(.x))))
+        }
+    )
+  )
+
+# Verify that all time split are of <time>
+glimpse(time_fomatted_male)
+```
 
 Check for any NA values
 
 ```{R}
-szn8_male_pro %>% filter(if_any(everything(), is.na))
+time_fomatted_male %>% filter(if_any(everything(), is.na))
 ```
 
-We observed 10 rows contain NA values. Since only a small fraction (10 out of 12500 rows) of cases have several missings, we will drop these cases.
+We observed 784 rows contain NA values. Since only a small fraction (784 out of 12500 rows) of cases have several missings, we will drop these cases.
 
 Check distinct City.
 
 ```{R}
-szn8_male_pro %>% group_by(City) %>% summarise(count = n())
+time_fomatted_male %>% group_by(City) %>% summarise(count = n())
 ```
 
 We observe the oddness that all City are recorded as "N/A" as characters instead of true NA values. Since City is totally missing for all entries and does not carry significance to the analysis, we will drop the City variable.
@@ -69,7 +90,7 @@ We observe the oddness that all City are recorded as "N/A" as characters instead
 Check distinct Division.
 
 ```{R}
-szn8_male_pro %>% group_by(Division) %>% summarise(count = n())
+time_fomatted_male %>% group_by(Division) %>% summarise(count = n())
 ```
 
 We observe that all athletes are HYROX PRO Division (ignore NA since it will be dropped later), which is correct based on our project scope. For easy gender reference, we will add a "MALE" remark – "MALE HYROX PRO".
@@ -77,11 +98,11 @@ We observe that all athletes are HYROX PRO Division (ignore NA since it will be 
 Based on all inspection made, we will now clean szn8_male_pro and saved into a new male_pro_clean.
 
 ```{R}
-male_pro_clean <- szn8_male_pro %>%
+male_pro_clean <- time_fomatted_male %>%
   # drop all NA cases
   filter(!if_any(everything(), is.na)) %>%
-  # deselect City column
-  select(- City) %>%
+  # deselect City and athlete_url column
+  select(- City, - athlete_url) %>%
   # remark MALE in Division
   mutate(
     Division = "MALE HYROX PRO"
@@ -91,66 +112,143 @@ male_pro_clean <- szn8_male_pro %>%
 male_pro_clean %>% head()
 ```
 
-### Inspect szn8_female_pro
-
-```{R}
-szn8_female_pro %>% filter(if_any(everything(), is.na))
-```
-
-We observed 11 rows contain NA values. Since only a small fraction (11 out of 12500 rows) of cases have several missings, we will drop these cases.
-
-Check distinct City.
-
-```{R}
-szn8_female_pro %>% group_by(City) %>% summarise(count = n())
-```
-
-We observe the oddness that all City are recorded as "N/A" as characters instead of true NA values. Since City is totally missing for all entries and does not carry significance to the analysis, we will drop the City variable.
-
-Check distinct Division.
-
-```{R}
-szn8_female_pro %>% group_by(Division) %>% summarise(count = n())
-```
-
-We observe that all athletes are HYROX PRO Division (ignore NA since it will be dropped later), which is correct based on our project scope. For easy gender reference, we will add a "FEMALE" remark – "FEMALE HYROX PRO".
-
-Based on all inspection made, we will now clean szn8_female_pro and saved into a new female_pro_clean.
-
-```{R}
-female_pro_clean <- szn8_female_pro %>%
-  # drop all NA cases
-  filter(!if_any(everything(), is.na)) %>%
-  # deselect City column
-  select(- City) %>%
-  # remark FEMALE in Division
-  mutate(
-    Division = "FEMALE HYROX PRO"
-  ) 
-  
-
-female_pro_clean %>% head()
-```
-
 ## Descriptive Analysis
 
-Average Station Times (Mean time in seconds against stations by division)
+### 1. Running trajectory and slowdown
 
 ```{R}
-
+male_long <- male_pro_clean %>%
+  select(
+    Division,
+    starts_with("Running_")
+  ) %>%
+  pivot_longer(
+    cols = starts_with("Running_"),
+    names_to = "Run_Name",
+    values_to = "Run_Time"
+  ) %>%
+  mutate(
+    Run_Num = as.numeric(str_extract(Run_Name, "\\d+")),
+    Time_Sec = as.numeric(Run_Time)
+  )
 ```
 
-Running time progression (Mean running in seconds time against nth run station)
+
+Generate summary of running Q1, Q2 or median, Q3
 
 ```{R}
-
+run_summary <- male_long %>%
+  group_by(Run_Num) %>%
+  summarise(
+    Q1_Sec    = quantile(Time_Sec, 0.25, na.rm = TRUE),
+    Median_Sec = median(Time_Sec, na.rm = TRUE),
+    Q3_Sec    = quantile(Time_Sec, 0.75, na.rm = TRUE),
+    .groups = "drop"
+  )
+  
+run_summary %>% arrange(Run_Num)
 ```
-
-Station consistency (Coefficient of variation against station)
 
 ```{R}
-
+ggplot(run_summary, aes(x = Run_Num, y = Median_Sec)) +
+  geom_ribbon(aes(ymin = Q1_Sec, ymax = Q3_Sec), alpha = 0.25, color = NA) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2.5) +
+  # Vertical dashed line after Station 4 / Run 4
+  geom_vline(xintercept = 4.5, linetype = "dashed", color = "gray40", linewidth = 0.7) +
+  scale_x_continuous(breaks = 1:8, labels = paste("Run", 1:8)) +
+  labs(
+    title = "HYROX Male Run-Time Trajectory",
+    subtitle = "Median run split times with Interquartile Range; Dashed line marks Mid Race",
+    x = "Run Segment",
+    y = "Split Time (seconds)"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.minor = element_blank(),
+    legend.position = "none",
+    strip.text = element_text(face = "bold", size = 12),
+    plot.title = element_text(face = "bold")
+  )
 ```
+
+```{R}
+analysis_data <- male_pro_clean %>%
+  mutate(
+    Early_Run_Mean = rowMeans(across(all_of(run_cols[1:4]), as.numeric), na.rm = TRUE),
+    Later_Run_Mean = rowMeans(across(all_of(run_cols[4:8]), as.numeric), na.rm = TRUE),
+    Slowdown_Percentage = 100 * (Later_Run_Mean - Early_Run_Mean) / Early_Run_Mean,
+    
+    Pacing_Cat = case_when(
+      Slowdown_Percentage > 10 ~ "Severe Fatigue (>10%)",
+      Slowdown_Percentage > 0  ~ "Moderate Slowdown (0–10%)",
+      TRUE              ~ "Negative Split (Faster Late)"
+    )
+  )
+
+
+slowdown_summary <- analysis_data %>%
+  summarise(
+    n = n(), 
+    Q1_Percentage = as.numeric(quantile(Slowdown_Percentage, 0.25)),
+    Median_Percentage = median(Slowdown_Percentage),
+    Q3_Percentage = as.numeric(quantile(Slowdown_Percentage, 0.75)),
+    Percentage_Slower = 100 * mean(Slowdown_Percentage > 0)
+  )
+
+# Extract key numbers for annotation
+Median_Value <- round(slowdown_summary$Median_Percentage, 1)
+Percentage_Slow <- round(slowdown_summary$Percentage_Slower, 1)
+
+ggplot(analysis_data, aes(x = Slowdown_Percentage)) +
+  geom_histogram(bins = 50, fill = "#3b82a6", color = "white", alpha = 0.85) +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "#b45309", linewidth = 0.8) +
+  geom_vline(xintercept = slowdown_summary$Median_Percentage, linetype = "solid", color = "#1e3a8a", linewidth = 1) +
+  annotate(
+    "label", x = slowdown_summary$Median_Percentage + 2, y = Inf, vjust = 1.5, hjust = 0,
+    label = paste0("Median Slowdown: +", Median_Value, "%\n", Percentage_Slow, "% of males slowed down"),
+    fill = "white", color = "#1e3a8a", fontface = "bold"
+  ) +
+  labs(
+    title = "Hyrox Male Late-Race Late-Race Run Slowdown",
+    subtitle = "Slowdown = 100 × (Runs 5–8 Mean − Runs 1–4 Mean) / Runs 1–4 Mean",
+    x = "Slowdown (%)",
+    y = "Number of Male Athletes"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(panel.grid.minor = element_blank(), plot.title = element_text(face = "bold"))
+```
+
+### Early stations: different tasks, separate scales
+
+Compare distributions **within** each of Stations 1–4, rather than equating raw SkiErg, sled, and burpee times or calling between-athlete variation “station consistency.” The coefficient of variation below is the across-record SD divided by the mean for each station; it does not measure within-athlete fatigue. No causal/physiological inference follows from these summaries.
+
+```{r descriptive-stations, fig.width=8, fig.height=4.5}
+station_long <- analysis_data %>%
+  select(all_of(station_cols)) %>%
+  pivot_longer(everything(), names_to = "station", values_to = "seconds") %>%
+  mutate(station = factor(station, levels = station_cols,
+                          labels = c("SkiErg", "Sled Push", "Sled Pull",
+                                     "Burpee Broad Jumps")))
+station_summary <- station_long %>%
+  group_by(station) %>%
+  summarise(n = n(), median_seconds = median(seconds),
+            q25_seconds = as.numeric(quantile(seconds, 0.25)),
+            q75_seconds = as.numeric(quantile(seconds, 0.75)),
+            across_record_cv = sd(seconds) / mean(seconds), .groups = "drop")
+knitr::kable(station_summary, digits = 2,
+             caption = "Early-station distributions, seconds; CV is across records")
+
+ggplot(station_long, aes(station, seconds)) +
+  geom_boxplot(fill = "#3b82a6", outlier.shape = NA) +
+  coord_cartesian(ylim = c(0, as.numeric(quantile(station_long$seconds, 0.99)))) +
+  labs(title = "First four stations: distinct exercise-time distributions",
+       subtitle = "Display capped at overall 99th percentile; calculations retain all rows",
+       x = "Station", y = "Split time (seconds)") +
+  theme_minimal()
+```
+
+In this selected sample, `r nrow(analysis_data)` of `r nrow(male_pro_clean)` cleaned male-labelled rows have the required splits and a distinct URL; `r sample_audit$n[2]` cleaned rows fail the split check. Median Run 8 (`r round(run_summary$median_seconds[8])` s) is slower than median Run 1 (`r round(run_summary$median_seconds[1])` s), although the trajectory is not monotonic. The median within-record later-versus-earlier slowdown is `r round(slowdown_summary$median_pct, 1)`%, and `r round(slowdown_summary$pct_slower, 1)`% of retained records have a positive slowdown. These summaries describe selected records, not an estimated causal effect of the stations. The URL overlap precludes a sex comparison, and missing verified event IDs preclude event independence claims. Extreme splits should be checked against source pages before interpreting the tails. The separate predictive section must compare held-out models to test whether early stations add information beyond early runs.
 
 ## Predictive Analysis
 
