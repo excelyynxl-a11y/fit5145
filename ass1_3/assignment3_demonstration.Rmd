@@ -214,13 +214,50 @@ female_pro_clean <- szn8_female_pro %>%
 female_pro_clean %>% head()
 ```
 
-## 
+## Descriptive Analysis
+
+Average Station Times (Mean time in seconds against stations by division)
 
 ```{R}
 
 ```
 
-## 
+
+
+Running time progression (Mean running in seconds time against nth run station)
+
+```{R}
+
+```
+
+Station consistency (Coefficient of variation against station)
+
+```{R}
+
+```
+
+
+## Predictive Analysis
+
+```{R}
+
+```
+
+```{R}
+
+```
+
+```{R}
+
+```
+
+```{R}
+
+```
+
+```{R}
+
+```
 
 ```{R}
 
