@@ -131,8 +131,9 @@ male_long <- male_pro_clean %>%
     Run_Num = as.numeric(str_extract(Run_Name, "\\d+")),
     Time_Sec = as.numeric(Run_Time)
   )
-```
 
+male_long
+```
 
 Generate summary of running Q1, Q2 or median, Q3
 
@@ -143,11 +144,14 @@ run_summary <- male_long %>%
     Q1_Sec    = quantile(Time_Sec, 0.25, na.rm = TRUE),
     Median_Sec = median(Time_Sec, na.rm = TRUE),
     Q3_Sec    = quantile(Time_Sec, 0.75, na.rm = TRUE),
+    Coef_Variation = sd(Time_Sec) / mean(Time_Sec), 
     .groups = "drop"
   )
   
 run_summary %>% arrange(Run_Num)
 ```
+
+Vizualize median run split time with interquartile range against run station.
 
 ```{R}
 ggplot(run_summary, aes(x = Run_Num, y = Median_Sec)) +
@@ -172,21 +176,32 @@ ggplot(run_summary, aes(x = Run_Num, y = Median_Sec)) +
   )
 ```
 
+### Run slowdown rate distribution
+
 ```{R}
 analysis_data <- male_pro_clean %>%
   mutate(
     Early_Run_Mean = rowMeans(across(all_of(run_cols[1:4]), as.numeric), na.rm = TRUE),
     Later_Run_Mean = rowMeans(across(all_of(run_cols[4:8]), as.numeric), na.rm = TRUE),
     Slowdown_Percentage = 100 * (Later_Run_Mean - Early_Run_Mean) / Early_Run_Mean,
-    
     Pacing_Cat = case_when(
       Slowdown_Percentage > 10 ~ "Severe Fatigue (>10%)",
       Slowdown_Percentage > 0  ~ "Moderate Slowdown (0–10%)",
       TRUE              ~ "Negative Split (Faster Late)"
-    )
+    ),
+    Pacing_Cat = factor(Pacing_Cat, levels = c(
+      "Negative Split (Faster Late)",
+      "Moderate Slowdown (0–10%)",
+      "Severe Fatigue (>10%)"
+    ))
   )
 
+analysis_data
+```
 
+Generate Q1, median and Q3 slowdown percentage summary.
+
+```{R}
 slowdown_summary <- analysis_data %>%
   summarise(
     n = n(), 
@@ -195,22 +210,43 @@ slowdown_summary <- analysis_data %>%
     Q3_Percentage = as.numeric(quantile(Slowdown_Percentage, 0.75)),
     Percentage_Slower = 100 * mean(Slowdown_Percentage > 0)
   )
+```
 
-# Extract key numbers for annotation
+Vizualize distribution of run slowdown rate.
+
+```{R}
+# Extract key numbers for text display
 Median_Value <- round(slowdown_summary$Median_Percentage, 1)
 Percentage_Slow <- round(slowdown_summary$Percentage_Slower, 1)
 
-ggplot(analysis_data, aes(x = Slowdown_Percentage)) +
-  geom_histogram(bins = 50, fill = "#3b82a6", color = "white", alpha = 0.85) +
+ggplot(analysis_data, aes(x = Slowdown_Percentage, fill = Pacing_Cat)) +
+  geom_histogram(bins = 50, color = "white", alpha = 0.85) +
+  scale_fill_manual(
+    values = c(
+      "Negative Split (Faster Late)" = "#10b981", # Green
+      "Moderate Slowdown (0–10%)"    = "#3b82f6", # Blue
+      "Severe Fatigue (>10%)"        = "#ef4444"  # Red
+    )
+  ) +
   geom_vline(xintercept = 0, linetype = "dashed", color = "#b45309", linewidth = 0.8) +
   geom_vline(xintercept = slowdown_summary$Median_Percentage, linetype = "solid", color = "#1e3a8a", linewidth = 1) +
   annotate(
-    "label", x = slowdown_summary$Median_Percentage + 2, y = Inf, vjust = 1.5, hjust = 0,
-    label = paste0("Median Slowdown: +", Median_Value, "%\n", Percentage_Slow, "% of males slowed down"),
-    fill = "white", color = "#1e3a8a", fontface = "bold"
+    "label", 
+    x = slowdown_summary$Median_Percentage + 2, 
+    y = Inf, 
+    vjust = 1.3, 
+    hjust = 0,
+    label = paste0("Median: +", Median_Value, "%\nSlower: ", Percentage_Slow, "%"),
+    fill = "white", 
+    color = "#1e3a8a", 
+    fontface = "bold",
+    size = 3, 
+    label.padding = unit(0.15, "lines"), 
+    label.r = unit(0.1, "lines"),        
+    label.size = 0.2                     
   ) +
   labs(
-    title = "Hyrox Male Late-Race Late-Race Run Slowdown",
+    title = "Hyrox Male Late-Race Run Slowdown Distribution",
     subtitle = "Slowdown = 100 × (Runs 5–8 Mean − Runs 1–4 Mean) / Runs 1–4 Mean",
     x = "Slowdown (%)",
     y = "Number of Male Athletes"
@@ -219,36 +255,57 @@ ggplot(analysis_data, aes(x = Slowdown_Percentage)) +
   theme(panel.grid.minor = element_blank(), plot.title = element_text(face = "bold"))
 ```
 
-### Early stations: different tasks, separate scales
+### Individual functional station time distribution
 
-Compare distributions **within** each of Stations 1–4, rather than equating raw SkiErg, sled, and burpee times or calling between-athlete variation “station consistency.” The coefficient of variation below is the across-record SD divided by the mean for each station; it does not measure within-athlete fatigue. No causal/physiological inference follows from these summaries.
-
-```{r descriptive-stations, fig.width=8, fig.height=4.5}
-station_long <- analysis_data %>%
+```{R}
+male_station_long <- male_pro_clean %>%
   select(all_of(station_cols)) %>%
-  pivot_longer(everything(), names_to = "station", values_to = "seconds") %>%
-  mutate(station = factor(station, levels = station_cols,
-                          labels = c("SkiErg", "Sled Push", "Sled Pull",
-                                     "Burpee Broad Jumps")))
-station_summary <- station_long %>%
-  group_by(station) %>%
-  summarise(n = n(), median_seconds = median(seconds),
-            q25_seconds = as.numeric(quantile(seconds, 0.25)),
-            q75_seconds = as.numeric(quantile(seconds, 0.75)),
-            across_record_cv = sd(seconds) / mean(seconds), .groups = "drop")
-knitr::kable(station_summary, digits = 2,
-             caption = "Early-station distributions, seconds; CV is across records")
+  pivot_longer(
+    everything(),
+    names_to = "Station",
+    values_to = "Station_Time"
+  ) %>%
+  mutate(
+    Station = factor(
+      Station, 
+      levels = station_cols,
+      labels = c("SkiErg", "Sled Push", "Sled Pull","Burpee Broad Jumps", "Row", "Farmers Carry", "Sandbag Lunges", "Wall Balls")),
+    Station_Sec = as.numeric(Station_Time)
+  )
 
-ggplot(station_long, aes(station, seconds)) +
-  geom_boxplot(fill = "#3b82a6", outlier.shape = NA) +
-  coord_cartesian(ylim = c(0, as.numeric(quantile(station_long$seconds, 0.99)))) +
-  labs(title = "First four stations: distinct exercise-time distributions",
-       subtitle = "Display capped at overall 99th percentile; calculations retain all rows",
-       x = "Station", y = "Split time (seconds)") +
-  theme_minimal()
+male_station_long %>% arrange(Station)
 ```
 
-In this selected sample, `r nrow(analysis_data)` of `r nrow(male_pro_clean)` cleaned male-labelled rows have the required splits and a distinct URL; `r sample_audit$n[2]` cleaned rows fail the split check. Median Run 8 (`r round(run_summary$median_seconds[8])` s) is slower than median Run 1 (`r round(run_summary$median_seconds[1])` s), although the trajectory is not monotonic. The median within-record later-versus-earlier slowdown is `r round(slowdown_summary$median_pct, 1)`%, and `r round(slowdown_summary$pct_slower, 1)`% of retained records have a positive slowdown. These summaries describe selected records, not an estimated causal effect of the stations. The URL overlap precludes a sex comparison, and missing verified event IDs preclude event independence claims. Extreme splits should be checked against source pages before interpreting the tails. The separate predictive section must compare held-out models to test whether early stations add information beyond early runs.
+Generate summary for functional stations.
+
+```{R}
+station_summary <- male_station_long %>%
+  group_by(Station) %>%
+  summarise(
+    n = n(),
+    Q1_Sec = as.numeric(quantile(Station_Sec, 0.25)),
+    Median_Sec = median(Station_Sec),
+    Q3_Sec = as.numeric(quantile(Station_Sec, 0.75)),
+    Coef_Variation = sd(Station_Sec) / mean(Station_Sec), 
+    .groups = "drop"
+  )
+
+station_summary
+```
+
+Visualize time split boxplots against each functional station.
+
+```{R}
+ggplot(male_station_long, aes(x = Station, y = Station_Sec)) +
+  geom_boxplot(fill = "#3b82a6", outlier.shape = NA) +
+  coord_cartesian(ylim = c(0, as.numeric(quantile(male_station_long$Station_Sec, 0.99)))) +
+  labs(
+    title = "Split time boxplot for each station",
+    x = "Station", 
+    y = "Split time (seconds)"
+  ) +
+  theme_minimal()
+```
 
 ## Predictive Analysis
 
