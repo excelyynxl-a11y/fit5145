@@ -1,0 +1,251 @@
+---
+title: "textual_data"
+output: html_document
+date: "2026-09-30"
+---
+
+## Pre-processing textual data
+
+```{R}
+library(tm)
+```
+
+```{R}
+essay <- read.csv("data/AI_Human.csv")
+head(essay, 1)
+```
+
+```{R}
+# check structure of essay 
+str(essay)
+```
+
+## 1. Tokenisation
+
+Tokenisation process typically involves splitting the text into individual words or tokens based on whitespace characters. We have two approaches to perform tokenisation in R.
+
+### Approach 1: tokenizers library
+
+```{R}
+library(tokenizers)
+```
+
+```{R}
+tokenised_essay <- lapply(
+  essay$text, function(line) {
+    unlist(tokenize_words(line)) 
+  }
+)
+
+
+tokenised_essay[1]
+```
+
+### Approach 2: Create corpus object using the tm library
+
+```{R}
+# DataframeSource function only accepts a dataframe with two columns named `doc_id` and `text`. 
+# Create the `doc_id` column is just row index 
+essay$doc_id <- seq(nrow(essay))
+```
+
+```{R}
+# Create the DataFrameSource
+essay_source <- DataframeSource(essay)
+
+```
+
+```{R}
+# Create a Corpus
+essay_corpus <- Corpus(essay_source)
+essay_corpus
+```
+
+```{R}
+inspect(essay_corpus[1:1])
+```
+
+## 2. Text removal (Removing stop words, punctuation, numbers, and spaces and case normalisation)
+
+```{R}
+# remove stop words
+essay_corpus <- tm_map(essay_corpus, removeWords, stopwords("english"))
+
+# remove punctuation
+essay_corpus <- tm_map(essay_corpus, removePunctuation)
+
+# remove all numbers
+essay_corpus <- tm_map(essay_corpus, removeNumbers)
+
+# remove redundant spaces
+essay_corpus <- tm_map(essay_corpus, stripWhitespace)
+
+# case normalisation
+essay_corpus <- tm_map(essay_corpus, content_transformer(tolower))
+
+inspect(essay_corpus[1:1])
+```
+
+What’s the reasons of performing the text removal?
+
+- Removing stopwords: Eliminating common words that do not carry much meaning.
+
+- Removing punctuations: Removing punctuations which do not contribute much to the meaning of text.
+
+- Removing numbers: Sometimes, numerical digits do not contribute much to the meaning of text and can be removed.
+
+- Removing spaces: Removing spaces for consistency
+
+- Case normalisation: Converting all tokens to lowercase ensures that stop words can be matched consistently regardless of their capitalization.
+
+## 3. Stemming and Lemmatisation
+
+Stemming and lemmatisation are both techniques used in natural language processing (NLP) to reduce words to their base or root forms, which helps in reducing sparsity and improving the efficiency and accuracy of text analysis tasks.
+
+- stemming: reduces words to their base or root forms by removing suffixes or prefixes
+
+- lemmatisation: reduces words to their dictionary or lemma forms, which are valid words
+
+### Stemming
+
+```{R}
+essay_stem <- tm_map(essay_corpus, stemDocument)
+
+inspect(essay_stem[1])
+```
+
+### Lemmatisation
+
+```{R}
+library(textstem)
+```
+
+```{R}
+# Define a function to lemmatise the text
+lemmatise_text <- function(text) {
+  lemmatised <- lemmatize_strings(text)
+  return(lemmatised)
+}
+
+# Apply lemmatisation to the corpus
+essay_lemma <- tm_map(
+  essay_corpus,
+  content_transformer(lemmatise_text)
+)
+
+inspect(essay_lemma[1])
+```
+
+### **Stemming vs** Lemmatisation
+
+```{R}
+inspect(essay_stem[1])
+```
+
+```{R}
+inspect(essay_lemma[1])
+```
+
+## 4. Feature extraction: Bag of Words (Bow)
+
+```{R}
+#  Create a matrix which its rows are the documents and columns are the words
+essay_dtm <- DocumentTermMatrix(essay_stem)
+
+inspect(essay_dtm)
+```
+
+\<\<DocumentTermMatrix (documents: 1000, terms: 8902)\>\>: Means 1000 individual docs/essay are analysed. Across the 100 essays combined, there are 8902 unique stem words
+
+Non-/sparse entries: 113470/8788530: Means 113470 cells contain number greater than zero.
+
+Sparsity : 99%: Means 99% of entire matrix consist of zeros.
+
+```{R}
+## reduce the sparcity of our essay_dtm if the term appears less than 10% (1-0.9) in all documents, remove it
+essay_dtm_spar <- removeSparseTerms(essay_dtm, 0.9)
+## if sparsity is equal to 0.9, then we are removing terms that only appear in at most 10% of the data
+
+inspect(essay_dtm_spar)
+```
+
+TF (Term Frequency)
+
+- Measures how frequently a term occurs in a document.
+
+- Since every document is different in length, it is possible that a term would appear much more times in long documents than shorter ones.
+
+- Thus, the term frequency is often divided by the document length (aka. the total number of terms in the document) as a way of normalization.
+
+- TF(t) = (Number of times term t appears in a document) / (Total number of terms in the document).
+
+IDF (Inverse Document Frequency)
+
+- Measures how important a term is.
+
+- While computing TF, all terms are considered equally important. However it is known that certain terms, such as “is”, “of”, and “that”, may appear a lot of times but have little importance.
+
+- Thus we need to weigh down the frequent terms while scale up the rare ones, by computing the following.
+
+- IDF(t) = log_e(Total number of documents / Number of documents with term t in it).
+
+- If lets say a common_term (eg: "if", "the", "of") which appears in all documents, then IDF(common_term) = log_e(Total number of documents / Number of documents with term t in it) = log_e(Total number of documents / Total number of documents) = log_e(1) = 0
+
+- This drives TF-IDF score to penalised down to zero.
+
+```{R}
+# Create a matrix
+dtm <- DocumentTermMatrix(essay_stem)
+
+#  Convert DTM to TF-IDF weighted matrix
+tfidf <- weightTfIdf(dtm)
+
+inspect(tfidf)
+```
+
+- A high TF-IDF score means word is uniquely characteristics of this document compared to all others.
+
+- Common terms (eg: "the", "of", "is") get pushed down to near zero.
+
+## Visualisation
+
+```{R}
+library(tidyverse)
+library(ggplot2)
+```
+
+```{R}
+term_freq <- colSums(as.matrix(essay_dtm))
+
+df <- data.frame(term = names(term_freq), freq = term_freq)
+
+df <- df %>%
+  filter(freq >= 100) %>%
+  arrange(desc(freq))
+
+df_plot <- df %>%
+  top_n(10, freq)
+
+ggplot(df_plot, aes(x = fct_reorder(term, freq), y = freq, fill = freq)) +
+  geom_bar(stat = "identity") + xlab("Terms")+ylab("Count")+coord_flip()
+```
+
+```{R}
+library(wordcloud2)
+```
+
+```{R}
+wordcloud2(df, color = "random-dark", backgroundColor = "white")
+```
+
+```{R}
+
+```
+
+```{R}
+
+```
+
+```{R}
+
+```

@@ -5,8 +5,8 @@
 .Rproj.user/
 
 # Ignore data folders
-*data/
-*Data/
+data/
+Data/
 
 # EXCEPTION data folder for ass1_3 will be published to git
 !*ass1_3/data/

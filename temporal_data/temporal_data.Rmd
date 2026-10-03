@@ -1,0 +1,287 @@
+---
+title: "temporal_data"
+output: html_document
+date: "2026-09-26"
+---
+
+# Working with dates and times
+
+## Parsing dates with time zones
+
+```{R}
+library(tidyverse)
+library(lubridate)
+```
+
+```{R}
+ymd("20180810")
+```
+
+```{R}
+ymd("2018-08-10")
+```
+
+```{R}
+ymd("2018/08/10")
+```
+
+```{R}
+mdy("10/15/2018")
+```
+
+```{R}
+dmy("10/08/2018")
+```
+
+## Add a time zone
+
+```{R}
+ymd("2018-08-10", tz = "Australia/Melbourne")
+```
+
+```{R}
+ymd("2018-08-10", tz = "Africa/Abidjan")
+```
+
+```{R}
+ymd("2018-08-10", tz = "America/Anchorage")
+```
+
+```{R}
+ymd("2018-08-10", tz = "America/Los_Angeles")
+```
+
+## Making sense of time zones
+
+```{R}
+today()
+```
+
+```{R}
+today(tz = "America/Los_Angeles")
+```
+
+```{R}
+now()
+```
+
+```{R}
+now(tz = "America/Los_Angeles")
+```
+
+## Parsing date with times
+
+```{R}
+ymd_hms("2018-08-10 10:05:30", tz = "Australia/Melbourne")
+```
+
+```{R}
+ymd_hms("2018-08-10 10:05:30", tz = "America/Los_Angeles")
+```
+
+## Extracting temporal elements
+
+```{R}
+wday("2018-08-10")
+```
+
+```{R}
+wday("2018-08-10", label = TRUE)
+```
+
+```{R}
+wday("2018-08-10", label = TRUE, abbr = FALSE)
+```
+
+```{R}
+wday("2018-08-10", label = TRUE, week_start = 1)
+```
+
+```{R}
+month("2018-08-10")
+```
+
+```{R}
+month("2018-08-10", label = TRUE)
+```
+
+```{R}
+month("2018-08-10", label = TRUE, abbr = FALSE)
+```
+
+```{R}
+quarter("2018-08-10")
+```
+
+```{R}
+semester("2018-08-10")
+```
+
+```{R}
+yday("2018-08-10") # count how many days in a year have occurred for a date
+
+```
+
+## Case study: pedestrian data in Melbourne
+
+```{R}
+ped_melb.south.bourke <- read_csv("ped_melb.south.bourke.csv")
+```
+
+```{R}
+# Create year, month and wday variable
+ped_melb.south.bourke <- ped_melb.south.bourke %>%
+  mutate(
+    year = year(Date_Time),
+    month = month(Date_Time, label = TRUE,
+                  abbr = TRUE),
+    wday = wday(Date_Time, label = TRUE, abbr = TRUE, week_start = 1)
+  )
+
+# Create Date column
+ped_melb.south.bourke$Date <- as.Date(ped_melb.south.bourke$Date_Time)
+
+ped_melb.south.bourke
+```
+
+```{R}
+# filter for 2018 and the sensor, Melbourne Centrall
+ped <- ped_melb.south.bourke %>%
+  filter(
+    year == 2018,
+    Sensor == "Melbourne Central"
+  )
+
+ped
+```
+
+```{R}
+
+```
+
+## A first look at the counts
+
+```{R}
+library(scales)
+
+# Bar plot of total pedestrian count of each month of 2018
+ped %>%
+  ggplot(aes(x = month, y = Count)) +
+  geom_col() + 
+  scale_y_continuous(labels = comma)
+```
+
+```{R}
+# Bar plot of total pedestrian count of each weekday of 2018
+ped %>%
+  ggplot(aes(x = wday, y = Count)) +
+  geom_col() +
+  scale_y_continuous(labels = comma)
+```
+
+```{R}
+ped %>% 
+  group_by(Date_Time) %>% 
+  summarise(Total_Count = sum(Count, na.rm = TRUE))
+```
+
+```{R}
+ped_daily <- ped %>%
+  group_by(Date) %>%
+  summarise(Total_Count = sum(Count, na.rm = TRUE))
+
+ped_daily %>% 
+  ggplot(aes(x = Date, y = Total_Count)) + 
+  geom_line() +
+  theme_minimal()
+```
+
+## Distribution of counts
+
+### Hour of the day
+
+```{R}
+ped %>%
+  ggplot(aes(x = as.factor(Time), y = Count)) +
+  geom_boxplot() +
+  scale_x_discrete(breaks = seq(0, 23, by = 6))
+```
+
+### Day of the week
+
+```{R}
+ped %>%
+  ggplot(aes(x = wday, y = Count)) +
+  geom_boxplot()
+```
+
+### Month of the year
+
+```{R}
+ped %>% 
+  ggplot(aes(x = month, y = Count)) + 
+  geom_boxplot()
+```
+
+```{R}
+ped %>%
+  ggplot(aes(x = Time, y = Count, group = Date)) +
+  geom_line()
+```
+
+```{R}
+ped %>%
+  ggplot(aes(x = Time, y = Count, group = Date)) +
+  geom_line(alpha = 0.6) +
+  facet_wrap(~month)
+```
+
+```{R}
+ped %>%
+  ggplot(aes(x = Time, y = Count, group = Date)) + 
+  geom_line() +
+  facet_grid(month ~ wday)
+```
+
+## Calendar plots
+
+```{R}
+library(sugrrants)
+```
+
+```{R}
+p1 <- ped %>%
+  frame_calendar(
+    x = Time,
+    y = Count,
+    date = Date,
+    nrow = 4
+  ) %>%
+  ggplot(aes(x = .Time, y = .Count, group = Date)) + 
+  geom_line()
+
+prettify(p1)
+```
+
+```{R}
+library(tsibble)
+library(timeDate)
+```
+
+```{R}
+vic_holidays <- holiday_aus(2018, state = "VIC")
+
+ped <- ped %>%
+  mutate(
+    holiday = ifelse(Date %in% vic_holidays$date | wday %in% c("Sat", "Sun"), "yes", "no")
+  )
+
+p1 <- ped %>% 
+  frame_calendar(x = Time, y = Count, date = Date, nrow = 4) %>%
+  ggplot(aes(x = .Time, y = .Count, group = Date, colour=holiday)) +
+  geom_line() + 
+  scale_colour_brewer(palette = "Dark2") +
+  theme(legend.position = "bottom")
+
+prettify(p1)
+```

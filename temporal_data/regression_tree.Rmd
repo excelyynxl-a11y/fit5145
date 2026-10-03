@@ -1,0 +1,298 @@
+---
+title: "regression_tree"
+output: html_document
+date: "2026-09-26"
+---
+
+# Regression Tree
+
+## A sample code chunk using synthetic data
+
+```{R}
+set.seed(900)
+
+x <- sort(runif(100) - 0.5)
+
+df <- data.frame(x, y=10*c(x[1:50]^2, x[51:75]*2, -x[76:100]^2)+rnorm(100)*0.5)
+
+ggplot(df, aes(x=x, y=y)) + geom_point()
+```
+
+## Model fit
+
+```{R}
+library(rpart)
+```
+
+```{R}
+df_rp <- rpart(y~x, data = df)
+df_rp
+
+# data points in left subtree have x >= 0.19
+# data points in right subtree have x < 0.19
+```
+
+## Plot the regression tree
+
+```{R}
+library(rpart.plot)
+```
+
+```{R}
+rpart.plot(df_rp)
+```
+
+## Plot the regression tree on the data
+
+```{R}
+library(viridis)
+```
+
+```{R}
+splt <- as_tibble(df_rp$splits)
+
+splt <- splt %>% mutate(order=1:nrow(splt)) %>%
+  select(index, order)
+
+ggplot(df, aes(x=x, y=y)) + geom_point() +
+  geom_vline(data=splt, aes(xintercept = index, colour=factor(order)), 
+             linetype=2) + 
+  geom_text(data=splt, aes(x=index, y=max(df$y), label=order), nudge_x=0.02) +
+  scale_x_continuous(breaks=seq(-0.5, 0.5, 0.1)) +
+  scale_colour_viridis_d() +
+  theme_bw() +
+  theme(legend.position="none")
+```
+
+## How the regression tree’s predictions of appear relative to the data
+
+```{R}
+# Create split buckets
+df <- df %>%
+  mutate(
+    bucket = cut(x, breaks = c(min(x)-0.001, splt$index, max(x)))
+  )
+
+# Prediction between lower and upper bound of split (reg tree pred: mean of y)
+df_pred <- df %>%
+  group_by(bucket) %>%
+  mutate(pred = mean(y)) %>%
+  arrange(x) %>%
+  separate(
+    bucket, 
+    into = c("lower", "upper"),
+    sep = ","
+  ) %>%
+  mutate(
+    lower = as.numeric(str_remove_all(lower, "[(]")),
+    upper = as.numeric(str_remove_all(upper, "\\]"))
+  ) %>%
+  select(pred, lower, upper) %>%
+  distinct() %>%
+  gather("boundaries", "x", 2:3)
+
+# Prediction from regression tree 
+ggplot(df) +
+  geom_point(aes(x=x, y=y)) +
+  geom_line(data = df_pred, aes(x=x, y=pred, group=pred), colour="hotpink", size=1.5) +
+  geom_vline(data=splt, aes(xintercept = index, colour=factor(order)), linetype=2) +
+  labs(title = "Predictions in pink") +
+  scale_x_continuous(breaks=seq(-0.5, 0.5, 0.1)) +
+  scale_colour_viridis_d() +
+  theme_bw() +
+  theme(legend.position="none")
+```
+
+## How the calculations are made to decide on the first partition
+
+```{R}
+sst <- var(df$y)*(nrow(df)-1)
+
+compute_anova <- function(left, right) {
+  ssl <- var(left$y)*(nrow(left)-1)
+  if (nrow(left) == 1)
+    ssl <- 1
+  ssr <- var(right$y)*(nrow(right)-1)
+  if (nrow(right) == 1)
+    ssr <- 1
+  av <- sst - (ssl+ssr)
+  return(av)
+}
+
+aov_f <- data.frame(x=df$x[-1], f=df$y[-1])
+
+for (i in 2:nrow(df)) {
+  left <- df[1:(i-1),]
+  right <- df[i:nrow(df),]
+  aov_f$x[i-1] <- mean(df$x[c(i-1, i)])
+  aov_f$f[i-1] <- compute_anova(left, right)
+}
+
+p1 <- ggplot(df, aes(x=x, y=y)) + geom_point(alpha=0.5) + scale_x_continuous(breaks=seq(-0.5, 0.5, 0.1))
+
+p2 <- ggplot(data=aov_f) +
+  geom_line(aes(x=x, y=f), colour="hotpink") +
+  geom_vline(xintercept = df_rp$splits[1,4], colour="hotpink", linetype=2)
+
+gridExtra::grid.arrange(p1, p2, ncol=1)
+```
+
+## Diagnostics
+
+```{R}
+library(tidyverse)
+
+set.seed(900)
+x <- sort(runif(100) - 0.5)
+y <- 10 * c(x[1:50]^2, x[51:75] * 2, -x[76:100]^2) + rnorm(100) * 0.5
+df <- tibble(x = x, y = y)
+```
+
+## Stopping rules
+
+```{R}
+df_rp <- rpart(y ~ x, data = df)
+df_rp
+```
+
+## Why does the algorithm stop at 7 terminal nodes (indicated by \*)?
+
+```{R}
+# rpart() defaults to the stopping rule as follows:
+str(df_rp$control)
+# minsplit : minimum number of points in a node that algorithm is allowed to split.
+# minbucket : minimum number of points in a terminal node
+```
+
+## Smaller minsplit and minbucket, overgrowing trees
+
+```{R}
+# fits a regression tree model with a smaller minsplit
+df_rp2 <- rpart(y ~ x, data = df, control = rpart.control(minsplit = 10))
+
+df_rp2
+```
+
+```{R}
+str(df_rp2$control)
+```
+
+```{R}
+library(gridExtra)
+```
+
+```{R}
+# Data frame of splits
+splt <- as_tibble(df_rp$splits)
+splt <- splt %>% mutate(order=1:nrow(splt)) %>%
+  select(index, order)
+splt2 <- as_tibble(df_rp2$splits)
+splt2 <- splt2 %>% mutate(order=1:nrow(splt2)) %>%
+  select(index, order)
+
+# Predictions with buckets and boundaries for plotting
+df_pred <- df %>% 
+  mutate(pred = predict(df_rp, df),
+         bucket = cut(x, breaks=c(min(x)-0.001, splt$index, max(x)))) 
+df_pred_line <- df_pred %>%
+  separate(bucket, into = c("lower", "upper"), sep = ",") %>%
+  mutate(lower = as.numeric(str_remove_all(lower, "[(]")),
+         upper = as.numeric(str_remove_all(upper, "\\]"))) %>%
+  select(pred, lower, upper) %>%
+  distinct() %>%
+  gather("boundaries", "x", 2:3)
+df_pred2 <- df %>% 
+  mutate(pred = predict(df_rp2, df),
+         bucket = cut(x, breaks=c(min(x)-0.001, splt2$index, max(x))))
+df_pred2_line <- df_pred2 %>%
+  separate(bucket, into = c("lower", "upper"), sep = ",") %>%
+  mutate(lower = as.numeric(str_remove_all(lower, "[(]")),
+         upper = as.numeric(str_remove_all(upper, "\\]"))) %>%
+  select(pred, lower, upper) %>%
+  distinct() %>%
+  gather("boundaries", "x", 2:3)
+
+# Plot of regression tree predictions
+p1 <- ggplot(df_pred) +
+  geom_point(aes(x=x, y=y)) +
+  geom_line(
+    data = df_pred_line, aes(x=x, y=pred, group=pred),
+    colour = "hotpink",
+    size = 1.5
+  ) +
+  scale_x_continuous(breaks = seq(-0.5, 0.5, 0.1)) +
+  theme_bw() +
+  ggtitle("Old model")
+
+p2 <- ggplot(df_pred2) +
+  geom_point(aes(x=x, y=y)) +
+  geom_line(
+    data = df_pred2_line, aes(x=x, y=pred, group=pred), 
+    colour = "orange",
+    size=1.5
+  ) +
+  scale_x_continuous(breaks = seq(-0.5, 0.5, 0.1)) +
+  theme_bw() +
+  ggtitle("New model")
+
+grid.arrange(p1, p2, ncol = 2)
+```
+
+Complex model tends to improve the fit for in-sample data (training data), but worsen the predictions for out of-sample data. In this situation, the model is overfitting
+
+## Residuals
+
+```{R}
+df_rp_aug <- df %>%
+  mutate(e = residuals(df_rp))
+
+ggplot(df_rp_aug, aes(x=x, y=e)) +
+  geom_point() +
+  ylab("residuals") + 
+  theme(aspect.ratio = 1) + 
+  scale_x_continuous(breaks = seq(-0.5, 0.5, 0.1))
+```
+
+## Goodness of fit
+
+R2 measures the proportion of variability in explainedby the model.
+
+It ranges between 0 and 1, with a value close to 1 indicating that the model fits almost perfectly with the data
+
+```{R}
+gof <- printcp(df_rp, digits = 3)
+#  relative error is R^2
+# after 6 splits it is 0.1906376
+# R^2 = 0.8093624, indicates that the model explains most of the variability in y
+```
+
+```{R}
+R2 <- 1 - sum(df_rp_aug$e^2) / sum((df$y - mean(df$y))^2)
+
+R2
+```
+
+## Residuals against fitted values
+
+```{R}
+df %>%
+  mutate(
+    e = residuals(df_rp), fitted = predict(df_rp, newdata = df)
+  ) %>%
+  ggplot(aes(x = fitted, y= e)) +
+  geom_point() +
+  theme(aspect.ratio = 1) +
+  ylab("residuals")
+```
+
+```{R}
+
+```
+
+```{R}
+
+```
+
+```{R}
+
+```
