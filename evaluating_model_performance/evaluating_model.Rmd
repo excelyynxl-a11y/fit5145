@@ -1,0 +1,239 @@
+---
+title: "evaluating_model"
+output: html_document
+date: "2026-10-03"
+---
+
+# Evaluating Mode Performance
+
+## Load library
+
+```{R}
+library(knitr)
+library(ggplot2)
+library(tidyverse)
+library(naniar)
+library(reshape2)
+library(caret)
+```
+
+## Load data
+
+```{R}
+houses_raw <- read_csv("data/Melbourne_housing_FULL.csv")
+houses_raw %>% head()
+```
+
+## Preprocessing the dataset
+
+```{R}
+houses <- houses_raw %>%
+  select(Price, Type, Rooms, Bathroom, Car) %>%
+  impute_median_at(vars(c(Price, Rooms, Bathroom, Car)))
+```
+
+## Building a polynomial regression model
+
+```{R}
+### Split data into the training and testing sets
+# Generate the sample indices for 80% of the housing dataset.
+sample_index <- sample(1:nrow(houses), nrow(houses)*0.8)
+
+# Generate the train and test sets, using the sample indices 
+train_set <- houses[sample_index, ]
+test_set <- houses[-sample_index, ]
+
+### Build a linear model with polynomial terms
+model <- lm(Price ~ Type + poly(Rooms, 3) + poly(Bathroom, 3) + 
+              poly(Car, 3), data = train_set)
+model
+    
+### Evaluating the performance of a model
+# Make predictions on the test set
+test_predictions <- predict(model, newdata = test_set)
+
+# Calculate R-squared along with RMSE and MAE
+R2(test_predictions, test_set$Price)
+```
+
+Every time we run the code, the R-squared value varies because the model is built using different datasets. We can try cross-validation, bootstrapping, and similar techniques to measure and address the uncertainty in a model.
+
+## Cross-Validation
+
+Used in statistical analysis and machine learning to evaluate a model’s performance and reliability.
+
+```{R}
+### Set up cross-validation
+set.seed(123)  # For reproducibility
+
+train_control <- trainControl(
+  method = "cv",  # Cross-validation method
+  number = 10,  # Number of folds
+)
+
+### Define the model formula with polynomial terms
+formula <- Price ~ Type + poly(Rooms, 3) + poly(Bathroom, 3) + poly(Car, 3)
+
+### Train a model with cross-validation
+model <- train(
+  formula, # Model formula (predictor variables and target variable)
+  data = houses,  # Data for training
+  method = "lm",  # Model type
+  trControl = train_control  # Cross-validation setup
+)
+
+### Print cross-validation results
+model  # Show the model and cross-validation results
+```
+
+Is the result of cross-validation reliable? Why?
+
+- Yes
+
+- Cross-validation provides a reliable estimate of how well a model is likely to perform on unseen data.
+
+- Helps avoid overfitting by using the entire dataset for both training and testing.
+
+## Bootstrapping
+
+Estimate the distribution of a statistic (such as the mean, median, variance, etc.) by resampling with replacement from an existing dataset. Useful for estimating the variability or uncertainty of a model by examining how much the model’s results vary across different bootstrap samples.
+
+```{R}
+### Initialise
+# Set seed for reproducibility
+set.seed(123)
+
+# Number of samples to create
+num_samples <- 5
+
+# Number of polynomial degrees to consider
+max_degree <- 8
+
+# Create a datatable to record the r-squared value for each bootstrap sample and each degree
+r_squared_table <- tibble(degree = numeric(), r_squared = numeric())
+
+
+### Build a model and return its r-squared for each bootstrap sample and each degree, using two `for` loops
+
+# Loop through polynomial degrees
+for (i in c(1:max_degree)) {
+  
+  # Loop to create bootstrap samples for each degree
+  for (j in 1:num_samples) {
+    
+    # Generate the bootstrap sample from the original data
+    sample_indices <- sample(1:nrow(houses), nrow(houses), replace = TRUE)
+    sampled_data <- houses[sample_indices, ]
+    
+    # Build a linear model with polynomial terms for each degree 'i'
+    model <- lm(Price ~ Type + poly(Rooms, i) + poly(Bathroom, i) + 
+                  poly(Car, i), data = sampled_data)
+    
+    # Store the R-squared value
+    r_squared_table[j, i] <- summary(model)$r.squared
+  }
+}
+
+
+### Pre-process the output data table
+colnames(r_squared_table) <- c('1', '2', '3', '4', '5', '6', '7', '8')
+
+
+### Check the output
+r_squared_table
+```
+
+We build a model and record its R-squared value for each bootstrap sample and each degree of polynomial.
+
+```{R}
+### Compute the mean r-squared of bootstrap sample models for each degree
+
+# Compute the mean
+mean_r_each_degree <- colMeans(r_squared_table)
+
+# Converting the vector into a data frame
+r_squared_df <- data.frame(
+  degree = names(mean_r_each_degree),  # Names as one column
+  r_squared = as.numeric(mean_r_each_degree)  # Values as another column
+)
+
+
+# Create a bar plot
+ggplot(r_squared_df, aes(x = degree, y = r_squared)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(
+    title = "R-squared vs Degree",
+    x = "Degree",
+    y = "R-squared"
+  ) +
+  coord_cartesian(ylim = c(0.16, 0.225)) +
+  theme_minimal()
+```
+
+Which model is the best? Why?
+
+- Degree 8 polynomial regression shows the highest R-squared value.
+
+What’s the benefit of using bootstrapping, based on this plot?
+
+- Provides a reliable estimate of how well a model is likely to perform, based on multiple bootstrap samples.
+
+```{R}
+### Pre-process the outcome datatable (Convert the wide form into the long form)
+r_squared_table_gather <- gather(r_squared_table, "degree", "r_squared")
+
+### Draw a chart
+ggplot(r_squared_table_gather, aes(x = degree, y = r_squared)) +
+  geom_boxplot() +
+  labs(title = "Boxplot for Given Data", x = "degree", y = "r_squared") +
+  theme_minimal()
+
+```
+
+Which model is the best? Why?
+
+- Degree 6 polynomial regression shows the highest r-squared median value.
+
+- The choice of degree differs from the previous plot because we're using the median value here.
+
+- The more critical aspect is that when considering both accuracy and the uncertainty of a model, degree 7 might be the best choice. However, this interpretation and decision can vary depending on the business context and data. For example, in the medical field, a model with a lower level of uncertainty might be preferred if two models have similar accuracies.
+
+What’s the benefit of using bootstrapping, based on this plot?
+
+- Bootstrapping can be used to estimate the variability or stability of a model by examining how much the model's results vary across different bootstrap samples.
+
+What’s the difference between cross validation and bootstrapping?
+
+- Cross-validation is useful for assessing model performance and generalisation.
+
+- Bootstrapping is valuable for estimating statistical variability and uncertainty of a model.
+
+- Boostrapping is useful when the dataset is small, as bootstrapping can simulate multiple datasets from a single dataset.
+
+```{R}
+
+```
+
+```{R}
+
+```
+
+```{R}
+
+```
+
+```{R}
+
+```
+
+```{R}
+
+```
+
+```{R}
+
+```
+
+```{R}
+
+```
