@@ -38,6 +38,16 @@ glimpse(szn8_female_pro)
 
 ## Data cleaning
 
+For our demonstration and analysis scope, the only field required are:
+
+- Time split of each of the 16 stations:
+
+- Total time:
+
+- Division: MALE HYROX PRO or FEMALE HYROX PRO
+
+Hence, data cleaning will not discard "dirty". For instance, although Age_Group contains "Unknown” or Roxzone is “N/A”, since neither is needed for the demonstration descriptive or predictive analysis, we will not attempt to "clean" or impute these values.
+
 ### Inspect szn8_male_pro
 
 Check for any NA values
@@ -64,22 +74,6 @@ szn8_male_pro %>% group_by(Division) %>% summarise(count = n())
 
 We observe that all athletes are HYROX PRO Division (ignore NA since it will be dropped later), which is correct based on our project scope. For easy gender reference, we will add a "MALE" remark – "MALE HYROX PRO".
 
-Check distinct Age_Group.
-
-```{R}
-szn8_male_pro %>% group_by(Age_Group) %>% summarise(count = n())
-```
-
-We observe 235 data has an odd "Unknown" Age_Group. Since there is no other related variable that hints us to the true atheletes Age_Group, cases with "Unknown" Age_Group will be dropped.
-
-Check Roxzone_Time.
-
-```{R}
-szn8_male_pro %>% group_by(Roxzone_Time) %>% summarise(count = n()) %>% arrange(desc(Roxzone_Time))
-```
-
-We observe 726 odd "N/A" as characters instead of true NA values. Since we know Roxzone_Time refers to transition time between each station, we can impute Roxzone_Time with the following formula: Roxzone_Time = Total_Time - each individual station time
-
 Based on all inspection made, we will now clean szn8_male_pro and saved into a new male_pro_clean.
 
 ```{R}
@@ -91,37 +85,7 @@ male_pro_clean <- szn8_male_pro %>%
   # remark MALE in Division
   mutate(
     Division = "MALE HYROX PRO"
-  ) %>%
-  # drop cases with Unknown Age_Group
-  filter(Age_Group != "Unknown") %>%
-  # impute Roxzone_Time
-  mutate(
-    total_sec = period_to_seconds(hms(Total_Time)),
-    
-    splits_sec = 
-      period_to_seconds(hms(Running_1)) + 
-      period_to_seconds(hms(Running_2)) + 
-      period_to_seconds(hms(Running_3)) + 
-      period_to_seconds(hms(Running_4)) + 
-      period_to_seconds(hms(Running_5)) + 
-      period_to_seconds(hms(Running_6)) + 
-      period_to_seconds(hms(Running_7)) + 
-      period_to_seconds(hms(Running_8)) + 
-      period_to_seconds(hms(SkiErg_1000m)) + 
-      period_to_seconds(hms(Sled_Push_50m)) + 
-      period_to_seconds(hms(Sled_Pull_50m)) + 
-      period_to_seconds(hms(Burpee_Broad_Jump_80m)) + 
-      period_to_seconds(hms(Row_1000m)) + 
-      period_to_seconds(hms(Farmers_Carry_200m)) + 
-      period_to_seconds(hms(Sandbag_Lunges_100m)) + 
-      period_to_seconds(hms(Wall_Balls)),
-    
-    roxzone_sec = total_sec - splits_sec,
-    
-    Roxzone_Time = hms::hms(roxzone_sec)
-  ) %>%
-  select(-total_sec, -splits_sec, -roxzone_sec) %>%
-  filter(as.numeric(Roxzone_Time) > 0)
+  )
   
 
 male_pro_clean %>% head()
@@ -151,22 +115,6 @@ szn8_female_pro %>% group_by(Division) %>% summarise(count = n())
 
 We observe that all athletes are HYROX PRO Division (ignore NA since it will be dropped later), which is correct based on our project scope. For easy gender reference, we will add a "FEMALE" remark – "FEMALE HYROX PRO".
 
-Check distinct Age_Group.
-
-```{R}
-szn8_female_pro %>% group_by(Age_Group) %>% summarise(count = n())
-```
-
-We observe 244 data has an odd "Unknown" Age_Group. Since there is no other related variable that hints us to the true atheletes Age_Group, cases with "Unknown" Age_Group will be dropped.
-
-Check Roxzone_Time.
-
-```{R}
-szn8_female_pro %>% group_by(Roxzone_Time) %>% summarise(count = n()) %>% arrange(desc(Roxzone_Time))
-```
-
-We observe 733 odd "N/A" as characters instead of true NA values. Since we know Roxzone_Time refers to transition time between each station, we can impute Roxzone_Time with the following formula: Roxzone_Time = Total_Time - each individual station time
-
 Based on all inspection made, we will now clean szn8_female_pro and saved into a new female_pro_clean.
 
 ```{R}
@@ -178,37 +126,7 @@ female_pro_clean <- szn8_female_pro %>%
   # remark FEMALE in Division
   mutate(
     Division = "FEMALE HYROX PRO"
-  ) %>%
-  # drop cases with Unknown Age_Group
-  filter(Age_Group != "Unknown") %>%
-  # impute Roxzone_Time
-  mutate(
-    total_sec = period_to_seconds(hms(Total_Time)),
-    
-    splits_sec = 
-      period_to_seconds(hms(Running_1)) + 
-      period_to_seconds(hms(Running_2)) + 
-      period_to_seconds(hms(Running_3)) + 
-      period_to_seconds(hms(Running_4)) + 
-      period_to_seconds(hms(Running_5)) + 
-      period_to_seconds(hms(Running_6)) + 
-      period_to_seconds(hms(Running_7)) + 
-      period_to_seconds(hms(Running_8)) + 
-      period_to_seconds(hms(SkiErg_1000m)) + 
-      period_to_seconds(hms(Sled_Push_50m)) + 
-      period_to_seconds(hms(Sled_Pull_50m)) + 
-      period_to_seconds(hms(Burpee_Broad_Jump_80m)) + 
-      period_to_seconds(hms(Row_1000m)) + 
-      period_to_seconds(hms(Farmers_Carry_200m)) + 
-      period_to_seconds(hms(Sandbag_Lunges_100m)) + 
-      period_to_seconds(hms(Wall_Balls)),
-    
-    roxzone_sec = total_sec - splits_sec,
-    
-    Roxzone_Time = hms::hms(roxzone_sec)
-  ) %>%
-  select(-total_sec, -splits_sec, -roxzone_sec) %>%
-  filter(as.numeric(Roxzone_Time) > 0)
+  ) 
   
 
 female_pro_clean %>% head()
@@ -222,8 +140,6 @@ Average Station Times (Mean time in seconds against stations by division)
 
 ```
 
-
-
 Running time progression (Mean running in seconds time against nth run station)
 
 ```{R}
@@ -235,7 +151,6 @@ Station consistency (Coefficient of variation against station)
 ```{R}
 
 ```
-
 
 ## Predictive Analysis
 
