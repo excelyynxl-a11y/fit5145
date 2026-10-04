@@ -12,6 +12,7 @@ author: Lim Excelyynx (34476245)
 In this demonstration, the datasets are obtained by websracping and saved into csv files named:
 
 - hyrox_season8_male_pro.csv
+- hyrox_season8_female_pro.csv
 
 These datasets has been published to excelyynxl-a11 GitHub repository (link: <https://github.com/excelyynxl-a11y/fit5145/tree/main/ass1_3>). You can download the csv files and saved them into a data folder to carry out this demonstration.
 
@@ -25,9 +26,18 @@ library(hms)
 
 ## Load dataset
 
+Season 8 Male Pro dataset.
+
 ```{R}
 szn8_male_pro <- read_csv("data/hyrox_season8_male_pro.csv")
 glimpse(szn8_male_pro)
+```
+
+Season 8 Female Pro dataset.
+
+```{R}
+szn8_female_pro <- read_csv("data/hyrox_season8_female_pro.csv")
+glimpse(szn8_female_pro)
 ```
 
 ## Data cleaning
@@ -112,12 +122,72 @@ male_pro_clean <- time_fomatted_male %>%
 male_pro_clean %>% head()
 ```
 
+### Inspect szn8_female_pro
+
+Data cleaning approach is similar as szn8_female_pro.
+
+```{R}
+# Standardize all time columns to strict <time> (hms class)
+time_fomatted_female <- szn8_female_pro %>%
+  mutate(
+    across(
+      all_of(all_time_cols),
+      ~ if (inherits(.x, "hms") || inherits(.x, "difftime")) {
+        hms::as_hms(as.numeric(.x))
+      } else {
+        hms::as_hms(period_to_seconds(lubridate::hms(as.character(.x))))
+      }
+    )
+  )
+
+# Verify that all time split are of <time>
+glimpse(time_fomatted_female)
+```
+
+Dropping cases and imputing values.
+
+```{R}
+female_pro_clean <- time_fomatted_female %>%
+  # drop all NA cases
+  filter(!if_any(everything(), is.na)) %>%
+  # deselect City and athlete_url column
+  select(- City, - athlete_url) %>%
+  # remark FEMALE in Division
+  mutate(
+    Division = "FEMALE HYROX PRO"
+  )
+
+
+female_pro_clean %>% head()
+```
+
+### Combining male and female into a single dataset
+
+```{R}
+combined_pro_clean <- bind_rows(
+  male_pro_clean,
+  female_pro_clean
+)
+
+glimpse(combined_pro_clean)
+```
+
+Check if both male and female data exist in combined dataset.
+
+```{R}
+combined_pro_clean %>% filter(Division == "MALE HYROX PRO") %>% head()
+```
+
+```{R}
+combined_pro_clean %>% filter(Division == "FeMALE HYROX PRO") %>% head()
+```
+
 ## Descriptive Analysis
 
 ### 1. Running trajectory and slowdown
 
 ```{R}
-male_long <- male_pro_clean %>%
+combined_long <- combined_pro_clean %>%
   select(
     Division,
     starts_with("Running_")
@@ -131,15 +201,13 @@ male_long <- male_pro_clean %>%
     Run_Num = as.numeric(str_extract(Run_Name, "\\d+")),
     Time_Sec = as.numeric(Run_Time)
   )
-
-male_long
 ```
 
 Generate summary of running Q1, Q2 or median, Q3
 
 ```{R}
-run_summary <- male_long %>%
-  group_by(Run_Num) %>%
+run_summary <- combined_long %>%
+  group_by(Division, Run_Num) %>%
   summarise(
     Q1_Sec    = quantile(Time_Sec, 0.25, na.rm = TRUE),
     Median_Sec = median(Time_Sec, na.rm = TRUE),
@@ -154,12 +222,15 @@ run_summary %>% arrange(Run_Num)
 Vizualize median run split time with interquartile range against run station.
 
 ```{R}
-ggplot(run_summary, aes(x = Run_Num, y = Median_Sec)) +
+ggplot(run_summary, aes(x = Run_Num, y = Median_Sec, color = Division, fill = Division, group = Division)) +
   geom_ribbon(aes(ymin = Q1_Sec, ymax = Q3_Sec), alpha = 0.25, color = NA) +
   geom_line(linewidth = 1) +
   geom_point(size = 2.5) +
   # Vertical dashed line after Station 4 / Run 4
   geom_vline(xintercept = 4.5, linetype = "dashed", color = "gray40", linewidth = 0.7) +
+  # Differentiate colour based on division
+  scale_color_manual(values = c("FEMALE HYROX PRO" ="#E377C2", "MALE HYROX PRO" = "#1F77B4")) +
+  scale_fill_manual(values = c("FEMALE HYROX PRO" = "#E377C2", "MALE HYROX PRO" = "#1F77B4")) +
   scale_x_continuous(breaks = 1:8, labels = paste("Run", 1:8)) +
   labs(
     title = "HYROX Male Run-Time Trajectory",
@@ -170,8 +241,7 @@ ggplot(run_summary, aes(x = Run_Num, y = Median_Sec)) +
   theme_minimal(base_size = 12) +
   theme(
     panel.grid.minor = element_blank(),
-    legend.position = "none",
-    strip.text = element_text(face = "bold", size = 12),
+    legend.position = "top",
     plot.title = element_text(face = "bold")
   )
 ```
@@ -179,7 +249,7 @@ ggplot(run_summary, aes(x = Run_Num, y = Median_Sec)) +
 ### Run slowdown rate distribution
 
 ```{R}
-analysis_data <- male_pro_clean %>%
+analysis_data <- combined_pro_clean %>%
   mutate(
     Early_Run_Mean = rowMeans(across(all_of(run_cols[1:4]), as.numeric), na.rm = TRUE),
     Later_Run_Mean = rowMeans(across(all_of(run_cols[4:8]), as.numeric), na.rm = TRUE),
@@ -187,7 +257,7 @@ analysis_data <- male_pro_clean %>%
     Pacing_Cat = case_when(
       Slowdown_Percentage > 10 ~ "Severe Fatigue (>10%)",
       Slowdown_Percentage > 0  ~ "Moderate Slowdown (0–10%)",
-      TRUE              ~ "Negative Split (Faster Late)"
+      TRUE                     ~ "Negative Split (Faster Late)"
     ),
     Pacing_Cat = factor(Pacing_Cat, levels = c(
       "Negative Split (Faster Late)",
@@ -196,31 +266,65 @@ analysis_data <- male_pro_clean %>%
     ))
   )
 
-analysis_data
+analysis_data %>% head()
 ```
 
 Generate Q1, median and Q3 slowdown percentage summary.
 
 ```{R}
 slowdown_summary <- analysis_data %>%
+  group_by(Division) %>%
   summarise(
     n = n(), 
     Q1_Percentage = as.numeric(quantile(Slowdown_Percentage, 0.25)),
     Median_Percentage = median(Slowdown_Percentage),
     Q3_Percentage = as.numeric(quantile(Slowdown_Percentage, 0.75)),
-    Percentage_Slower = 100 * mean(Slowdown_Percentage > 0)
+    Percentage_Slower = 100 * mean(Slowdown_Percentage > 0),
+    .groups = "drop"
+  ) %>%
+  # Create Label_Text for histogram display purpose
+  mutate(
+    Label_Text = paste0("Median: +", round(Median_Percentage, 1), "%\nSlower: ", round(Percentage_Slower, 1), "%")
   )
+
+slowdown_summary
 ```
 
-Vizualize distribution of run slowdown rate.
+Vizualize distribution of run slowdown rate using a faceted histogram with dynamic annotation.
 
 ```{R}
-# Extract key numbers for text display
-Median_Value <- round(slowdown_summary$Median_Percentage, 1)
-Percentage_Slow <- round(slowdown_summary$Percentage_Slower, 1)
+# Determine 1st and 99th percentiles to drop extreme visual tail
+x_min <- floor(quantile(analysis_data$Slowdown_Percentage, 0.01, na.rm = TRUE))
+x_max <- ceiling(quantile(analysis_data$Slowdown_Percentage, 0.99, na.rm = TRUE)) 
 
 ggplot(analysis_data, aes(x = Slowdown_Percentage, fill = Pacing_Cat)) +
+  # Colored histogram bars
   geom_histogram(bins = 50, color = "white", alpha = 0.85) +
+  coord_cartesian(xlim = c(x_min, x_max)) +
+  # Division-specific Median Line
+  geom_vline(
+    data = slowdown_summary, 
+    aes(xintercept = Median_Percentage), 
+    linetype = "solid", color = "#1e3a8a", linewidth = 0.9
+  ) +
+  
+  # Zero reference line
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray30", linewidth = 0.7) +
+  
+  # Dynamic Division Labels
+  geom_label(
+    data = slowdown_summary,
+    aes(x = Median_Percentage + 2, y = Inf, label = Label_Text),
+    inherit.aes = FALSE,
+    vjust = 1.2, hjust = 0,
+    fill = "white", color = "#1e3a8a", fontface = "bold",
+    size = 3, label.padding = unit(0.15, "lines"), label.r = unit(0.1, "lines")
+  ) +
+  
+  # Facet vertically by Division
+  facet_wrap(~ Division, ncol = 1) +
+  
+  # Color scale
   scale_fill_manual(
     values = c(
       "Negative Split (Faster Late)" = "#10b981", # Green
@@ -228,40 +332,36 @@ ggplot(analysis_data, aes(x = Slowdown_Percentage, fill = Pacing_Cat)) +
       "Severe Fatigue (>10%)"        = "#ef4444"  # Red
     )
   ) +
-  geom_vline(xintercept = 0, linetype = "dashed", color = "#b45309", linewidth = 0.8) +
-  geom_vline(xintercept = slowdown_summary$Median_Percentage, linetype = "solid", color = "#1e3a8a", linewidth = 1) +
-  annotate(
-    "label", 
-    x = slowdown_summary$Median_Percentage + 2, 
-    y = Inf, 
-    vjust = 1.3, 
-    hjust = 0,
-    label = paste0("Median: +", Median_Value, "%\nSlower: ", Percentage_Slow, "%"),
-    fill = "white", 
-    color = "#1e3a8a", 
-    fontface = "bold",
-    size = 3, 
-    label.padding = unit(0.15, "lines"), 
-    label.r = unit(0.1, "lines"),        
-    label.size = 0.2                     
-  ) +
+  
+  # Styling
   labs(
-    title = "Hyrox Male Late-Race Run Slowdown Distribution",
-    subtitle = "Slowdown = 100 × (Runs 5–8 Mean − Runs 1–4 Mean) / Runs 1–4 Mean",
-    x = "Slowdown (%)",
-    y = "Number of Male Athletes"
+    title = "HYROX Late-Race Run Slowdown Distribution",
+    subtitle = "Slowdown % = 100 × (Mean Runs 5–8 − Mean Runs 1–4) / Mean Runs 1–4",
+    x = "Slowdown Percentage (%)",
+    y = "Number of Athletes",
+    fill = "Pacing Strategy"
   ) +
   theme_minimal(base_size = 12) +
-  theme(panel.grid.minor = element_blank(), plot.title = element_text(face = "bold"))
+  theme(
+    panel.grid.minor = element_blank(),
+    plot.subtitle = element_text(size = 9, color = "gray30"),
+    legend.title = element_text(size = 7, face = "bold"),
+    legend.text = element_text(size = 7),
+    legend.key.size = unit(0.4, "cm"),
+    legend.margin = margin(t = 2, b = 2),
+    legend.position = "top",
+    plot.title = element_text(face = "bold", size = 11),
+    strip.text = element_text(face = "bold", size = 10)
+  )
 ```
 
 ### Individual functional station time distribution
 
 ```{R}
-male_station_long <- male_pro_clean %>%
-  select(all_of(station_cols)) %>%
+combined_station_long <- combined_pro_clean %>%
+  select(Division, all_of(station_cols)) %>%
   pivot_longer(
-    everything(),
+    cols = all_of(station_cols),
     names_to = "Station",
     values_to = "Station_Time"
   ) %>%
@@ -273,14 +373,14 @@ male_station_long <- male_pro_clean %>%
     Station_Sec = as.numeric(Station_Time)
   )
 
-male_station_long %>% arrange(Station)
+combined_station_long %>% head()
 ```
 
 Generate summary for functional stations.
 
 ```{R}
-station_summary <- male_station_long %>%
-  group_by(Station) %>%
+station_summary <- combined_station_long %>%
+  group_by(Division, Station) %>%
   summarise(
     n = n(),
     Q1_Sec = as.numeric(quantile(Station_Sec, 0.25)),
@@ -290,21 +390,42 @@ station_summary <- male_station_long %>%
     .groups = "drop"
   )
 
-station_summary
+station_summary %>% arrange(Station)
 ```
 
 Visualize time split boxplots against each functional station.
 
 ```{R}
-ggplot(male_station_long, aes(x = Station, y = Station_Sec)) +
-  geom_boxplot(fill = "#3b82a6", outlier.shape = NA) +
-  coord_cartesian(ylim = c(0, as.numeric(quantile(male_station_long$Station_Sec, 0.99)))) +
-  labs(
-    title = "Split time boxplot for each station",
-    x = "Station", 
-    y = "Split time (seconds)"
+ggplot(combined_station_long, aes(x = Station, y = Station_Sec, color = Division, fill = Division)) +
+  geom_boxplot(
+    position = position_dodge(width = 0.8),
+    width = 0.6,
+    alpha = 0.4,
+    outlier.alpha = 0.3,
+    outlier.size = 1.2
   ) +
-  theme_minimal()
+  coord_cartesian(
+    ylim = c(0, as.numeric(quantile(combined_station_long$Station_Sec, 0.99)))
+  ) +
+  # Differentiate boxplot colour based on division
+  scale_color_manual(values = c("FEMALE HYROX PRO" ="#E377C2", "MALE HYROX PRO" = "#1F77B4")) +
+  scale_fill_manual(values = c("FEMALE HYROX PRO" = "#E377C2", "MALE HYROX PRO" = "#1F77B4")) +
+  labs(
+    title = "HYROX Station Split Time Distribution by Division",
+    subtitle = "Comparing station completion times (seconds) for Male VS Female Pro divisions",
+    x = "Station",
+    y = "Split Time (Seconds)",
+    color = "Division",
+    fill = "Division"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    legend.position = "top",
+    plot.title = element_text(face = "bold", size = 13),
+    plot.subtitle = element_text(size = 9, color = "gray30"),
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, face = "bold"))
 ```
 
 ## Predictive Analysis
