@@ -219,7 +219,7 @@ run_summary <- combined_long %>%
 run_summary %>% arrange(Run_Num)
 ```
 
-Vizualize median run split time with interquartile range against run station.
+Vizualize median run split time with interquartile range against run station with a line chart.
 
 ```{R}
 ggplot(run_summary, aes(x = Run_Num, y = Median_Sec, color = Division, fill = Division, group = Division)) +
@@ -233,7 +233,7 @@ ggplot(run_summary, aes(x = Run_Num, y = Median_Sec, color = Division, fill = Di
   scale_fill_manual(values = c("FEMALE HYROX PRO" = "#E377C2", "MALE HYROX PRO" = "#1F77B4")) +
   scale_x_continuous(breaks = 1:8, labels = paste("Run", 1:8)) +
   labs(
-    title = "HYROX Male Run-Time Trajectory",
+    title = "HYROX Run-Time Trajectory",
     subtitle = "Median run split times with Interquartile Range; Dashed line marks Mid Race",
     x = "Run Segment",
     y = "Split Time (seconds)"
@@ -242,11 +242,92 @@ ggplot(run_summary, aes(x = Run_Num, y = Median_Sec, color = Division, fill = Di
   theme(
     panel.grid.minor = element_blank(),
     legend.position = "top",
-    plot.title = element_text(face = "bold")
+    plot.title = element_text(face = "bold"),
+    plot.subtitle = element_text(size = 9, color = "gray30")
   )
 ```
 
-### Run slowdown rate distribution
+### 2. Run slowdown rate per stage
+
+```{R}
+combined_run_slowdown <- combined_pro_clean %>%
+  mutate(
+    across(all_of(run_cols), as.numeric),
+    `Run 1-2` = 100 * (Running_2 - Running_1) / Running_1,
+    `Run 2-3` = 100 * (Running_3 - Running_2) / Running_2,
+    `Run 3-4` = 100 * (Running_4 - Running_3) / Running_3,
+    `Run 4-5` = 100 * (Running_5 - Running_4) / Running_4,
+    `Run 5-6` = 100 * (Running_6 - Running_5) / Running_5,
+    `Run 6-7` = 100 * (Running_7 - Running_6) / Running_6,
+    `Run 7-8` = 100 * (Running_8 - Running_7) / Running_7
+  ) %>%
+  select(Division, `Run 1-2`:`Run 7-8`)
+
+combined_run_slowdown %>% head()
+```
+
+```{R}
+combined_run_slowdown_long <- combined_run_slowdown %>%
+  pivot_longer(
+    cols = starts_with("Run"),
+    names_to = "Transition",
+    values_to = "Slowdown_Percentage"
+  ) %>%
+  mutate(
+    Transition_Num = as.numeric(
+      factor(
+        Transition,
+        levels = c(
+          "Run 1-2", "Run 2-3", "Run 3-4", "Run 4-5", "Run 5-6", "Run 6-7", "Run 7-8"
+        )
+      )
+    )
+  )
+
+combined_run_slowdown_long %>% head()
+```
+
+Vizualize a high-level executive summary that highlights median run slowdown rate using a heat map.
+
+```{R}
+# Generate heatmap data
+heatmap_data <- combined_run_slowdown_long %>%
+  group_by(Division, Transition) %>%
+  summarise(
+    Median_Slowdown = median(Slowdown_Percentage, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+ggplot(heatmap_data, aes(x = Transition, y = Division, fill = Median_Slowdown)) +
+  geom_tile(color = "white", linewidth = 0.8) +
+  # Round Median_Slowdown value display to 1dp
+  geom_text(aes(label = paste0(round(Median_Slowdown, 1), "%")), color = "black", fontface = "bold", size = 3.5) +
+  scale_fill_gradient2(
+    low = "#10b981", 
+    mid = "#fef08a", 
+    high = "#ef4444", 
+    midpoint = 0,
+    name = "Median Slowdown (%)"
+  ) +
+  labs(
+    title = "Heatmap of Median Transition Slowdown",
+    x = "Run Transition",
+    y = NULL
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(), 
+    legend.position = "bottom"
+  )
+```
+
+Darker red shade indicates greater negative change in run split time. For example:
+
+- Athletes experience a 5.6%–5.7% slowdown on Run 3 immediately following Station 2 (Sled Push).
+
+- Athletes improve their pace by 1.1%–1.6% on Run 6 immediately following Station 5 (Rower)."
+
+### 3. Run slowdown rate distribution
 
 ```{R}
 analysis_data <- combined_pro_clean %>%
@@ -355,7 +436,7 @@ ggplot(analysis_data, aes(x = Slowdown_Percentage, fill = Pacing_Cat)) +
   )
 ```
 
-### Individual functional station time distribution
+### 4. Individual functional station time distribution
 
 ```{R}
 combined_station_long <- combined_pro_clean %>%
