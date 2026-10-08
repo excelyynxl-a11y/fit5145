@@ -179,8 +179,10 @@ combined_pro_clean %>% filter(Division == "MALE HYROX PRO") %>% head()
 ```
 
 ```{R}
-combined_pro_clean %>% filter(Division == "FeMALE HYROX PRO") %>% head()
+combined_pro_clean %>% filter(Division == "FEMALE HYROX PRO") %>% head()
 ```
+
+It is verified that both MALE and FEMALE data exist in the combined dataset.
 
 ## Descriptive Analysis
 
@@ -436,101 +438,6 @@ ggplot(analysis_data, aes(x = Slowdown_Percentage, fill = Pacing_Cat)) +
   )
 ```
 
-### 4. Individual functional station time distribution
+### 
 
-```{R}
-combined_station_long <- combined_pro_clean %>%
-  select(Division, all_of(station_cols)) %>%
-  pivot_longer(
-    cols = all_of(station_cols),
-    names_to = "Station",
-    values_to = "Station_Time"
-  ) %>%
-  mutate(
-    Station = factor(
-      Station, 
-      levels = station_cols,
-      labels = c("SkiErg", "Sled Push", "Sled Pull","Burpee Broad Jumps", "Row", "Farmers Carry", "Sandbag Lunges", "Wall Balls")),
-    Station_Sec = as.numeric(Station_Time)
-  )
-
-combined_station_long %>% head()
-```
-
-Generate summary for functional stations.
-
-```{R}
-station_summary <- combined_station_long %>%
-  group_by(Division, Station) %>%
-  summarise(
-    n = n(),
-    Q1_Sec = as.numeric(quantile(Station_Sec, 0.25)),
-    Median_Sec = median(Station_Sec),
-    Q3_Sec = as.numeric(quantile(Station_Sec, 0.75)),
-    Coef_Variation = sd(Station_Sec) / mean(Station_Sec), 
-    .groups = "drop"
-  )
-
-station_summary %>% arrange(Station)
-```
-
-Visualize time split boxplots against each functional station.
-
-```{R}
-ggplot(combined_station_long, aes(x = Station, y = Station_Sec, color = Division, fill = Division)) +
-  geom_boxplot(
-    position = position_dodge(width = 0.8),
-    width = 0.6,
-    alpha = 0.4,
-    outlier.alpha = 0.3,
-    outlier.size = 1.2
-  ) +
-  coord_cartesian(
-    ylim = c(0, as.numeric(quantile(combined_station_long$Station_Sec, 0.99)))
-  ) +
-  # Differentiate boxplot colour based on division
-  scale_color_manual(values = c("FEMALE HYROX PRO" ="#E377C2", "MALE HYROX PRO" = "#1F77B4")) +
-  scale_fill_manual(values = c("FEMALE HYROX PRO" = "#E377C2", "MALE HYROX PRO" = "#1F77B4")) +
-  labs(
-    title = "HYROX Station Split Time Distribution by Division",
-    subtitle = "Comparing station completion times (seconds) for Male VS Female Pro divisions",
-    x = "Station",
-    y = "Split Time (Seconds)",
-    color = "Division",
-    fill = "Division"
-  ) +
-  theme_minimal() +
-  theme(
-    panel.grid.minor = element_blank(),
-    panel.grid.major.x = element_blank(),
-    legend.position = "top",
-    plot.title = element_text(face = "bold", size = 13),
-    plot.subtitle = element_text(size = 9, color = "gray30"),
-    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, face = "bold"))
-```
-
-## Predictive Analysis
-
-```{R}
-
-```
-
-```{R}
-
-```
-
-```{R}
-
-```
-
-```{R}
-
-```
-
-```{R}
-
-```
-
-```{R}
-
-```
+## Predictive Analysis{R}
