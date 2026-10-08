@@ -60,6 +60,11 @@ Your report should have the following sections:
 
    > **Note:** The specification of the Data Analysis Approach section needs to be different from the Demonstration section and should be described separately. In the Data Analysis section, provide a high-level and comprehensive overview of your overall analysis approach. In the Demonstration section, apply part of your proposed analysis approach to a subset of your dataset to demonstrate the feasibility of your project.
 
+   > To clarify how the report and .Rmd file work together:
+   - Both sections belong in the PDF Report: Section 4 (Characterising and Analysing Data) in your PDF report must contain both the high-level Data Analysis Approach and the written Demonstration section where you report your analysis process and results.
+   - The .Rmd File: You perform the code execution in R Markdown (.Rmd) and submit this file on Moodle for demonstration purposes.
+   - Word Count: The 2500-word limit applies to your complete PDF report, which includes the text, figures, and results presented in your Demonstration section. Code inside the uploaded .Rmd file is not counted, but any written explanation of the demonstration included in your main PDF report does count toward the 2500 words.
+
 5. **Standard for Data Science Process, Data Governance and Management**
    - Describe any standards used in your data science process.
    - Describe any practices for data governance and management in the project, e.g., how to address key issues such as data accessibility, security, and confidentiality, as well as potential ethical concerns related to data usage.
