@@ -301,10 +301,15 @@ We observe females division Spearman corrrelation score (0.7416122) is higher th
 Scatterplot with per-division linear trend lines.
 
 ```{R}
-ggplot(analysis_data, aes(x = Early_Run_Mean, y = Later_Run_Mean, color = Division)) +
+ggplot(analysis_data, 
+       aes(
+         x = Early_Run_Mean, 
+         y = Later_Run_Mean, 
+         color = Division)
+      ) +
   geom_point(alpha = 0.15, size = 0.9) +
-  # Per-division linear trend lines
   geom_smooth(method = "lm", se = FALSE, linewidth = 1) +
+  facet_wrap(~ Division, nrow = 2)
   scale_color_manual(values = c("FEMALE HYROX PRO" = "#E377C2", "MALE HYROX PRO" = "#1F77B4")) +
   labs(
     title = "Later Run Mean versus Early Run Mean",
