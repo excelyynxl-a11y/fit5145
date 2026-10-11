@@ -22,6 +22,8 @@ These datasets has been published to excelyynxl-a11 GitHub repository (link: <ht
 library(tidyverse)
 library(lubridate)
 library(hms)
+library(randomForest)
+library(caret)
 ```
 
 ## Load dataset
@@ -182,7 +184,7 @@ combined_pro_clean %>% filter(Division == "MALE HYROX PRO") %>% head()
 combined_pro_clean %>% filter(Division == "FEMALE HYROX PRO") %>% head()
 ```
 
-It is verified that both MALE and FEMALE data exist in the combined dataset.
+Both MALE and FEMALE data exist in the combined dataset.
 
 ## Descriptive Analysis
 
@@ -249,77 +251,16 @@ ggplot(run_summary, aes(x = Run_Num, y = Median_Sec, color = Division, fill = Di
   )
 ```
 
-### 2. Run slowdown rate per stage
+WHAT DO WE OBSERVE?
 
-```{R}
-combined_run_slowdown <- combined_pro_clean %>%
-  mutate(
-    across(all_of(run_cols), as.numeric),
-    `Run 1-2` = 100 * (Running_2 - Running_1) / Running_1,
-    `Run 2-3` = 100 * (Running_3 - Running_2) / Running_2,
-    `Run 3-4` = 100 * (Running_4 - Running_3) / Running_3,
-    `Run 4-5` = 100 * (Running_5 - Running_4) / Running_4,
-    `Run 5-6` = 100 * (Running_6 - Running_5) / Running_5,
-    `Run 6-7` = 100 * (Running_7 - Running_6) / Running_6,
-    `Run 7-8` = 100 * (Running_8 - Running_7) / Running_7
-  ) %>%
-  select(Division, `Run 1-2`:`Run 7-8`)
-
-combined_run_slowdown %>% head()
-```
-
-```{R}
-combined_run_slowdown_long <- combined_run_slowdown %>%
-  pivot_longer(
-    cols = starts_with("Run"),
-    names_to = "Transition",
-    values_to = "Slowdown_Percentage"
-  ) %>%
-  mutate(
-    Transition_Num = as.numeric(
-      factor(
-        Transition,
-        levels = c(
-          "Run 1-2", "Run 2-3", "Run 3-4", "Run 4-5", "Run 5-6", "Run 6-7", "Run 7-8"
-        )
-      )
-    )
-  )
-
-combined_run_slowdown_long %>% head()
-```
-
-Summarise the median slowdown per transition for reporting.
-
-```{R}
-combined_run_slowdown_long %>%
-  group_by(Division, Transition) %>%
-  summarise(
-    Median_Slowdown = median(Slowdown_Percentage, na.rm = TRUE),
-    .groups = "drop"
-  )
-```
-
-The largest slowdown occurs on Run 3 immediately following Station 2 (Sled Push, +5.6% to +5.7%), whereas athletes speed up by 1.1%–1.6% on Run 6 immediately following Station 5 (Rower). This station-to-run linkage motivates including early station splits as predictors of later slowdown in the predictive analysis.
-
-### 3. Run slowdown rate distribution
+### 2. Slowdown summary and early–later association
 
 ```{R}
 analysis_data <- combined_pro_clean %>%
   mutate(
     Early_Run_Mean = rowMeans(across(all_of(run_cols[1:4]), as.numeric), na.rm = TRUE),
-    Later_Run_Mean = rowMeans(across(all_of(run_cols[4:8]), as.numeric), na.rm = TRUE),
-    Slowdown_Percentage = 100 * (Later_Run_Mean - Early_Run_Mean) / Early_Run_Mean,
-    Pacing_Cat = case_when(
-      Slowdown_Percentage > 10 ~ "Severe Fatigue (>10%)",
-      Slowdown_Percentage > 0  ~ "Moderate Slowdown (0–10%)",
-      TRUE                     ~ "Negative Split (Faster Late)"
-    ),
-    Pacing_Cat = factor(Pacing_Cat, levels = c(
-      "Negative Split (Faster Late)",
-      "Moderate Slowdown (0–10%)",
-      "Severe Fatigue (>10%)"
-    ))
+    Later_Run_Mean = rowMeans(across(all_of(run_cols[5:8]), as.numeric), na.rm = TRUE),
+    Slowdown_Percentage = 100 * (Later_Run_Mean - Early_Run_Mean) / Early_Run_Mean
   )
 
 analysis_data %>% head()
@@ -337,80 +278,169 @@ slowdown_summary <- analysis_data %>%
     Q3_Percentage = as.numeric(quantile(Slowdown_Percentage, 0.75)),
     Percentage_Slower = 100 * mean(Slowdown_Percentage > 0),
     .groups = "drop"
-  ) %>%
-  # Create Label_Text for histogram display purpose
-  mutate(
-    Label_Text = paste0("Median: +", round(Median_Percentage, 1), "%\nSlower: ", round(Percentage_Slower, 1), "%")
   )
 
 slowdown_summary
 ```
 
-Vizualize distribution of run slowdown rate using a faceted histogram with dynamic annotation.
+Spearman rank correlation between early and later run mean, overall and by division. Spearman is used because run times are non-normal and skewed, and extreme outliers are down-weighted.
 
 ```{R}
-# Determine 1st and 99th percentiles to drop extreme visual tail
-x_min <- floor(quantile(analysis_data$Slowdown_Percentage, 0.01, na.rm = TRUE))
-x_max <- ceiling(quantile(analysis_data$Slowdown_Percentage, 0.99, na.rm = TRUE)) 
+cor(analysis_data$Early_Run_Mean, analysis_data$Later_Run_Mean, method = "spearman")
 
-ggplot(analysis_data, aes(x = Slowdown_Percentage, fill = Pacing_Cat)) +
-  # Colored histogram bars
-  geom_histogram(bins = 50, color = "white", alpha = 0.85) +
-  coord_cartesian(xlim = c(x_min, x_max)) +
-  # Division-specific Median Line
-  geom_vline(
-    data = slowdown_summary, 
-    aes(xintercept = Median_Percentage), 
-    linetype = "solid", color = "#1e3a8a", linewidth = 0.9
-  ) +
-  
-  # Zero reference line
-  geom_vline(xintercept = 0, linetype = "dashed", color = "gray30", linewidth = 0.7) +
-  
-  # Dynamic Division Labels
-  geom_label(
-    data = slowdown_summary,
-    aes(x = Median_Percentage + 2, y = Inf, label = Label_Text),
-    inherit.aes = FALSE,
-    vjust = 1.2, hjust = 0,
-    fill = "white", color = "#1e3a8a", fontface = "bold",
-    size = 3, label.padding = unit(0.15, "lines"), label.r = unit(0.1, "lines")
-  ) +
-  
-  # Facet vertically by Division
-  facet_wrap(~ Division, ncol = 1) +
-  
-  # Color scale
-  scale_fill_manual(
-    values = c(
-      "Negative Split (Faster Late)" = "#10b981", # Green
-      "Moderate Slowdown (0–10%)"    = "#3b82f6", # Blue
-      "Severe Fatigue (>10%)"        = "#ef4444"  # Red
-    )
-  ) +
-  
-  # Styling
+analysis_data %>%
+  group_by(Division) %>%
+  summarise(
+    Spearman_Rho = cor(Early_Run_Mean, Later_Run_Mean, method = "spearman"),
+    .groups = "drop"
+  )
+```
+
+We observe females division Spearman corrrelation score (0.7416122) is higher than males (0.6522994), indicating females early run mean has a bigger impact on later run mean compared to males. Both division has relatively positive Spearman score (\> 0.5), therefore late-run performance is largely predictable from early pace.
+
+Scatterplot with per-division linear trend lines.
+
+```{R}
+ggplot(analysis_data, aes(x = Early_Run_Mean, y = Later_Run_Mean, color = Division)) +
+  geom_point(alpha = 0.15, size = 0.9) +
+  # Per-division linear trend lines
+  geom_smooth(method = "lm", se = FALSE, linewidth = 1) +
+  scale_color_manual(values = c("FEMALE HYROX PRO" = "#E377C2", "MALE HYROX PRO" = "#1F77B4")) +
   labs(
-    title = "HYROX Late-Race Run Slowdown Distribution",
-    subtitle = "Slowdown % = 100 × (Mean Runs 5–8 − Mean Runs 1–4) / Mean Runs 1–4",
-    x = "Slowdown Percentage (%)",
-    y = "Number of Athletes",
-    fill = "Pacing Strategy"
+    title = "Later Run Mean versus Early Run Mean",
+    subtitle = "Each point is one athlete-race; lines are per-division linear fits",
+    x = "Mean Runs 1–4 (seconds)",
+    y = "Mean Runs 5–8 (seconds)",
+    color = "Division"
   ) +
   theme_minimal(base_size = 12) +
   theme(
     panel.grid.minor = element_blank(),
-    plot.subtitle = element_text(size = 9, color = "gray30"),
-    legend.title = element_text(size = 7, face = "bold"),
-    legend.text = element_text(size = 7),
-    legend.key.size = unit(0.4, "cm"),
-    legend.margin = margin(t = 2, b = 2),
     legend.position = "top",
-    plot.title = element_text(face = "bold", size = 11),
-    strip.text = element_text(face = "bold", size = 10)
+    plot.title = element_text(face = "bold"),
+    plot.subtitle = element_text(size = 9, color = "gray30")
   )
 ```
 
-### 
+## Predictive Analysis
 
-## Predictive Analysis{R}
+The goal is to predict later-run performance (mean of Runs 5–8) at the mid-race checkpoint using only the first four run splits.
+
+All models are evaluated with 10-fold cross-validation using the same folds, so comparisons are fair.
+
+```{R}
+# Set up cross-validation
+set.seed(5145)
+
+# Create a row_id field for table-joining later; Division as factor for the random forest
+model_data <- analysis_data %>%
+  mutate(
+    .row_id = row_number(),
+    Division = factor(Division)
+  )
+
+# Shared 10-fold indices used by the caret models and the baseline
+folds <- createFolds(model_data$Later_Run_Mean, k = 10, returnTrain = TRUE)
+
+train_control <- trainControl(
+  method = "cv",
+  number = 10,
+  index = folds,
+  savePredictions = "final"
+)
+```
+
+Two models are compared:
+
+- **Linear model:** later mean on early mean (`Early_Run_Mean * Division` gives each division its own intercept and slope).
+- **Random forest:** a nonlinear benchmark testing whether the linear form is too restrictive.
+
+```{R}
+lm_cv <- train(
+  Later_Run_Mean ~ Early_Run_Mean * Division,
+  data = model_data,
+  method = "lm",
+  trControl = train_control
+)
+
+lm_cv
+```
+
+```{R}
+rf_cv <- train(
+  Later_Run_Mean ~ Early_Run_Mean + Division,
+  data = model_data,
+  method = "rf",
+  tuneGrid = data.frame(mtry = 2), # 2 predictors, use both per split
+  trControl = train_control
+)
+
+rf_cv
+```
+
+Compare out-of-fold performance of the three models using RMSE, MAE and R². MAE is less affected by outliers than RMSE because errors are not squared.
+
+```{R}
+
+lm_rf_metrics <- bind_rows(
+  lm_cv$results %>% mutate(Model = "Linear model (early mean by division)"),
+  rf_cv$results %>% mutate(Model = "Random forest")
+) %>%
+  select(Model, RMSE, MAE, Rsquared)
+
+
+lm_rf_metrics
+```
+
+We observe te MAE of both linear model (12.40229) and random forest (12.62731) are very similar, however the R2 or linear model (0.7042621) shows a more positive value (0.6934543) compared to random forest.
+
+Build the prediction corridor from out-of-fold residual quantiles of the linear model, then check empirical coverage by division.
+
+```{R}
+lm_oof <- lm_cv$pred %>%
+  left_join(model_data %>% select(.row_id, Division), by = c("rowIndex" = ".row_id"))
+
+band <- quantile(lm_oof$obs - lm_oof$pred, c(0.05, 0.95))
+
+corridor_coverage <- lm_oof %>%
+  mutate(
+    Lower = pred + band[1],
+    Upper = pred + band[2],
+    In_Corridor = obs >= Lower & obs <= Upper
+  ) %>%
+  group_by(Division) %>%
+  summarise(
+    n = n(),
+    Coverage_Pct = 100 * mean(In_Corridor),
+    Corridor_Width_Sec = mean(Upper - Lower),
+    .groups = "drop"
+  )
+
+corridor_coverage
+```
+
+To visualise the residual of the linear model fitted on all data, a residual-versus-fitted plot checks constant variance and the QQ plot checks approximate normality, which underlie how the corridor is interpreted.
+
+```{R}
+lm_final <- lm(Later_Run_Mean ~ Early_Run_Mean * Division, data = model_data)
+summary(lm_final)
+
+diag_data <- tibble(
+  Fitted = fitted(lm_final),
+  Residual = resid(lm_final)
+)
+
+ggplot(diag_data, aes(sample = Residual)) +
+  stat_qq(alpha = 0.3, size = 0.8, color = "#1F77B4") +
+  stat_qq_line(color = "gray30", linetype = "dashed") +
+  labs(
+    title = "Normal QQ Plot of Residuals",
+    x = "Theoretical Quantiles",
+    y = "Sample Quantiles"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(face = "bold", size = 11)
+  )
+```
