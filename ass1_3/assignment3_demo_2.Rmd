@@ -298,7 +298,7 @@ Spearman rank correlation is used to assess the strength and direction of associ
 Spearman rank correlation between later run mean with each possible half-race factors: early run mean and first 4 functional stations (SkiErg, Sled Push, Sled Pull, Burpee Broad Jump) to determine the strength of correlation.
 
 ```{R}
-analysis_data %>%
+early_spearman_summary <- analysis_data %>%
   group_by(Division) %>%
   summarise(
     Run_Spearman = cor(Early_Run_Mean, Later_Run_Mean, method = "spearman"),
@@ -317,6 +317,8 @@ analysis_data %>%
     Predictor = str_remove(Predictor, "_Spearman")
   ) %>%
   arrange(Division, desc(Rvalue))
+
+early_spearman_summary
 ```
 
 For female, we observe early run mean time has the strongest correlation with later run mean (women: r=0.742), followed by burpee broad (r=0.266) and sled pull (r=0.200). Whereas for male, we observe early run mean time has the strongest correlation with later run mean (r=0.652), followed by burpee broad jump (r=0.150) and sled pull (r=0.100).
@@ -391,10 +393,10 @@ model2 <- lm(Later_Run_Mean ~ (Early_Run_Mean + Burpee_Broad_Jump_80m) * Divisio
 summary(model2)
 ```
 
-#### Model 3: early run mean + ski + burpee broad jump + sled pull
+#### Model 3: early run mean + burpee broad jump + sled pull
 
 ```{R}
-model3 <- lm(Later_Run_Mean ~ (Early_Run_Mean + SkiErg_1000m + Burpee_Broad_Jump_80m + Sled_Pull_50m) * Division, data = analysis_data)
+model3 <- lm(Later_Run_Mean ~ (Early_Run_Mean + Burpee_Broad_Jump_80m + Sled_Pull_50m) * Division, data = analysis_data)
 
 summary(model3)
 ```
@@ -402,7 +404,7 @@ summary(model3)
 #### Model 4: early mean run + all 4 functional stations
 
 ```{R}
-model4 <- lm(Later_Run_Mean ~ (Early_Run_Mean + SkiErg_1000m + Sled_Push_50m + Sled_Pull_50m + Burpee_Broad_Jump_80m) * Division, data = analysis_data)
+model4 <- lm(Later_Run_Mean ~ (Early_Run_Mean + Burpee_Broad_Jump_80m + Sled_Pull_50m + SkiErg_1000m + Sled_Push_50m) * Division, data = analysis_data)
 
 summary(model4)
 ```
@@ -465,12 +467,11 @@ All 4 models shows random scatter around horizontal axis with no distinct trends
 ### 3. Evaluating models using cross-validation (10 folds)
 
 ```{R}
-# Define eac models linear formula
+# Define each models linear formula
 f1 <- Later_Run_Mean ~ Early_Run_Mean * Division
 f2 <- Later_Run_Mean ~ (Early_Run_Mean + Burpee_Broad_Jump_80m) * Division
 f3 <- Later_Run_Mean ~ (Early_Run_Mean + Burpee_Broad_Jump_80m + Sled_Pull_50m) * Division
-f4 <- Later_Run_Mean ~ (Early_Run_Mean + SkiErg_1000m + Sled_Push_50m +
-                          Sled_Pull_50m + Burpee_Broad_Jump_80m) * Division
+f4 <- Later_Run_Mean ~ (Early_Run_Mean + Burpee_Broad_Jump_80m + Sled_Pull_50m + SkiErg_1000m + Sled_Push_50m) * Division
 ```
 
 ```{R}
@@ -492,43 +493,49 @@ fits <- lapply(
     )
 )
 
-# Observe when we index a model from fits (eg: model 1), what fields do we have to enable us to obtain RMSE, MAE and R2 based on division
-fits$M1$pred %>% head()
-fits$M1
+cv_results <- bind_rows(
+  fits$M1$results,
+  fits$M2$results,
+  fits$M3$results,
+  fits$M4$results,
+  .id = "Model"
+) %>%
+  select(
+    Model, RMSE, Rsquared, MAE
+  )
+
+cv_results
+```
+
+We observed:
+
+- RMSE and MAE decreases from model 1 to 4, indicating adding functional station as factors reduces the difference in model prediction to actual value. However, the decreament is not significant.
+
+- R2 increases from model 1 to 4, meaning adding functional stations as factor improve the percentage of how much variation in later run mean is explainable by model. Similarly, the increment is not significant.
+
+- Since adding more factors into a model does not produce significantly better prediction, sticking to a simpler model is sufficient. Hence, model 1 (early run mean only as predictor of later run mean) is chosen. Model 1 can explain 70% of variation in later run time, with an average of 12.4s absolute differences between model predictions and atheletes actual later run mean values.
+
+```{R}
+anova(model1, model2, model3, model4)
 ```
 
 ```{R}
-# Currently, fits contain RMSE, MAE, R2 for all M1, M2, M3, M4. 
-# We want to identify each based on division.
-# Helper function to compute RMSE, MAE, R2 based on division:
-# RMSE = sqrt(avg sum of (pred - obs)^2)
-# MAE = avg of abs(pred - obs)
-# R2 = 1 - sum((pred - obs)^2) / sum((obs - avg of(obs))^2)
-per_division <- function(fit, label) {
-  fit$pred %>%
-    mutate(
-      Division = model_data$Division[rowIndex]
-    ) %>%
-    group_by(Division) %>%
-    summarise(
-      RMSE = sqrt(mean((pred - obs)^2)),
-      MAE  = mean(abs(pred - obs)),
-      R2   = 1 - sum((pred - obs)^2) / sum((obs - mean(obs))^2)
-    ) %>%
-    mutate(
-      Model = label
-    )
-}
-
-results <- bind_rows(
-  lapply(
-    names(fits),
-    function(n) per_division(fits[[n]], n)
-  )
-)
-
-results %>% arrange(Division, Model)
+fits$M1$pred %>%
+  mutate(Division = model_data$Division[rowIndex]) %>%
+  ggplot(aes(x = pred, y = obs, colour = Division)) +
+  geom_point(alpha = 0.6) +
+  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
+  labs(x = "Predicted later run mean", y = "Actual later run mean") +
+  theme_minimal()
 ```
 
-\
-We obtained all RMSE, MAE and R2 of each model by division:
+```{R}
+ggplot(analysis_data, aes(x = Early_Run_Mean, y = Later_Run_Mean, colour = Division)) +
+  geom_point(alpha = 0.6) +
+  geom_smooth(method = "lm", se = TRUE, colour = "black") +
+  facet_wrap(~ Division, nrow = 2) +
+  labs(x = "Early run mean (Run1-4, seconds)",
+       y = "Later run mean (Run5-8, seconds)",
+       title = "Early vs later run pace by division") +
+  theme_minimal()
+```
