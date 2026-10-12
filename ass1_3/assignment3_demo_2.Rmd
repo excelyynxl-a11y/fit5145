@@ -1,0 +1,534 @@
+---
+title: "assignment3_demonstration"
+output: pdf_document
+date: "2026-08-26"
+author: Lim Excelyynx (34476245)
+---
+
+# FIT5145 Assignment 1 & 3: Data-Driven Pacing Corridor for HYROX Athletes
+
+## Dataset Source
+
+In this demonstration, the datasets are obtained by websracping and saved into csv files named:
+
+- hyrox_season8_male_pro.csv
+- hyrox_season8_female_pro.csv
+
+These datasets has been published to excelyynxl-a11 GitHub repository (link: <https://github.com/excelyynxl-a11y/fit5145/tree/main/ass1_3>). You can download the csv files and saved them into a data folder to carry out this demonstration.
+
+## Load library
+
+```{R}
+library(tidyverse)
+library(lubridate)
+library(hms)
+library(randomForest)
+library(caret)
+library(grid)
+```
+
+## Load dataset
+
+Season 8 Male Pro dataset.
+
+```{R}
+szn8_male_pro <- read_csv("data/hyrox_season8_male_pro.csv")
+glimpse(szn8_male_pro)
+```
+
+Season 8 Female Pro dataset.
+
+```{R}
+szn8_female_pro <- read_csv("data/hyrox_season8_female_pro.csv")
+glimpse(szn8_female_pro)
+```
+
+## Data cleaning
+
+### Inspect szn8_male_pro
+
+Convert all time split into \<time\> format
+
+```{R}
+# Define all split columns
+run_cols <- paste0("Running_", 1:8)
+station_cols <- c(
+  "SkiErg_1000m", 
+  "Sled_Push_50m", 
+  "Sled_Pull_50m",
+  "Burpee_Broad_Jump_80m", 
+  "Row_1000m", 
+  "Farmers_Carry_200m",
+  "Sandbag_Lunges_100m", 
+  "Wall_Balls"
+)
+all_time_cols <- c("Total_Time", "Roxzone_Time", run_cols, station_cols)
+
+```
+
+```{R}
+# Standardize all time columns to strict <time> (hms class)
+time_fomatted_male <- szn8_male_pro %>%
+  mutate(
+    across(
+      all_of(all_time_cols),
+      ~ if (inherits(.x, "hms") || inherits(.x, "difftime")) {
+        hms::as_hms(as.numeric(.x))
+      } else {
+        hms::as_hms(period_to_seconds(lubridate::hms(as.character(.x))))
+      }
+    )
+  )
+
+# Verify that all time split are of <time>
+glimpse(time_fomatted_male[all_time_cols])
+```
+
+Check for any NA values
+
+```{R}
+time_fomatted_male %>% filter(if_any(everything(), is.na))
+```
+
+We observed 784 rows contain NA values. Since only a small fraction (784 out of 12500 rows) of cases have several missings, we will drop these cases.
+
+Check distinct City.
+
+```{R}
+time_fomatted_male %>% group_by(City) %>% summarise(count = n())
+```
+
+We observe the oddness that all City are recorded as "N/A" as characters instead of true NA values. Since City is totally missing for all entries and does not carry significance to the analysis, we will drop the City variable.
+
+Check distinct Division.
+
+```{R}
+time_fomatted_male %>% group_by(Division) %>% summarise(count = n())
+```
+
+We observe that all athletes are HYROX PRO Division (ignore NA since it will be dropped later), which is correct based on our project scope. For easy gender reference, we will add a "MALE" remark – "MALE HYROX PRO".
+
+Based on all inspection made, we will now clean szn8_male_pro and saved into a new male_pro_clean.
+
+```{R}
+male_pro_clean <- time_fomatted_male %>%
+  # drop all NA cases
+  filter(!if_any(everything(), is.na)) %>%
+  # deselect City and athlete_url column
+  select(- City, - athlete_url) %>%
+  # remark MALE in Division
+  mutate(
+    Division = "MALE HYROX PRO"
+  )
+  
+
+male_pro_clean %>% head()
+```
+
+### Inspect szn8_female_pro
+
+Data cleaning approach is similar as szn8_female_pro.
+
+```{R}
+# Standardize all time columns to strict <time> (hms class)
+time_fomatted_female <- szn8_female_pro %>%
+  mutate(
+    across(
+      all_of(all_time_cols),
+      ~ if (inherits(.x, "hms") || inherits(.x, "difftime")) {
+        hms::as_hms(as.numeric(.x))
+      } else {
+        hms::as_hms(period_to_seconds(lubridate::hms(as.character(.x))))
+      }
+    )
+  )
+
+# Verify that all time split are of <time>
+glimpse(time_fomatted_female)
+```
+
+Dropping cases and imputing values.
+
+```{R}
+female_pro_clean <- time_fomatted_female %>%
+  # drop all NA cases
+  filter(!if_any(everything(), is.na)) %>%
+  # deselect City and athlete_url column
+  select(- City, - athlete_url) %>%
+  # remark FEMALE in Division
+  mutate(
+    Division = "FEMALE HYROX PRO"
+  )
+
+
+female_pro_clean %>% head()
+```
+
+### Combining male and female into a single dataset
+
+```{R}
+combined_pro_clean <- bind_rows(
+  male_pro_clean,
+  female_pro_clean
+)
+
+glimpse(combined_pro_clean)
+```
+
+Check if both male and female data exist in combined dataset.
+
+```{R}
+combined_pro_clean %>% filter(Division == "MALE HYROX PRO") %>% head()
+```
+
+```{R}
+combined_pro_clean %>% filter(Division == "FEMALE HYROX PRO") %>% head()
+```
+
+Both MALE and FEMALE data exist in the combined dataset.
+
+## Descriptive Analysis
+
+### 1. Running trajectory and slowdown
+
+```{R}
+combined_long <- combined_pro_clean %>%
+  select(
+    Division,
+    starts_with("Running_")
+  ) %>%
+  pivot_longer(
+    cols = starts_with("Running_"),
+    names_to = "Run_Name",
+    values_to = "Run_Time"
+  ) %>%
+  mutate(
+    Run_Num = as.numeric(str_extract(Run_Name, "\\d+")),
+    Time_Sec = as.numeric(Run_Time) # Time split of each run in seconds
+  )
+
+combined_long %>% head()
+```
+
+Generate summary of running Q1, Q2 or median, Q3
+
+```{R}
+run_summary <- combined_long %>%
+  group_by(Division, Run_Num) %>%
+  summarise(
+    Q1_Sec    = quantile(Time_Sec, 0.25, na.rm = TRUE),
+    Median_Sec = median(Time_Sec, na.rm = TRUE),
+    Q3_Sec    = quantile(Time_Sec, 0.75, na.rm = TRUE),
+    Coef_Variation = sd(Time_Sec) / mean(Time_Sec), 
+    .groups = "drop"
+  )
+  
+run_summary %>% arrange(Run_Num)
+```
+
+Visualize median run split time with interquartile range against run station with a line chart.
+
+```{R}
+ggplot(run_summary, aes(x = Run_Num, y = Median_Sec, color = Division, fill = Division, group = Division)) +
+  geom_ribbon(aes(ymin = Q1_Sec, ymax = Q3_Sec), alpha = 0.25, color = NA) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2.5) +
+  # Vertical dashed line after Run 4
+  geom_vline(xintercept = 4.5, linetype = "dashed", color = "gray40", linewidth = 0.7) +
+  # Differentiate colour based on division
+  scale_color_manual(values = c("FEMALE HYROX PRO" ="#E377C2", "MALE HYROX PRO" = "#1F77B4")) +
+  scale_fill_manual(values = c("FEMALE HYROX PRO" = "#E377C2", "MALE HYROX PRO" = "#1F77B4")) +
+  scale_x_continuous(breaks = 1:8, labels = paste("Run", 1:8)) +
+  labs(
+    title = "HYROX Run-Time Trajectory",
+    subtitle = "Median run split times with interquartile range; Dashed line marks mid-race",
+    x = "Run Segment",
+    y = "Split Time (seconds)"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.minor = element_blank(),
+    legend.position = "top",
+    plot.title = element_text(face = "bold"),
+    plot.subtitle = element_text(size = 9, color = "gray30")
+  )
+```
+
+A general observation we see is female split time is higher than males. The overall trend of split time as the race progresses is almost identical across both division – run split time increases per station.
+
+### 2. Slowdown summary and early–later association
+
+Here, we want to analyse if early run split time is associated to later run split time.
+
+```{R}
+analysis_data <- combined_pro_clean %>%
+  mutate(
+    # Time split of all run station to seconds
+    Running_1 = as.numeric(Running_1),
+    Running_2 = as.numeric(Running_2),
+    Running_3 = as.numeric(Running_3),
+    Running_4 = as.numeric(Running_4),
+    Running_5 = as.numeric(Running_5),
+    Running_6 = as.numeric(Running_6),
+    Running_7 = as.numeric(Running_7),
+    Running_8 = as.numeric(Running_8),
+    # Time split of all functional station to seconds
+    SkiErg_1000m = as.numeric(SkiErg_1000m),
+    Sled_Push_50m = as.numeric(Sled_Push_50m),
+    Sled_Pull_50m = as.numeric(Sled_Pull_50m),
+    Burpee_Broad_Jump_80m = as.numeric(Burpee_Broad_Jump_80m),
+    Row_1000m = as.numeric(Row_1000m),
+    Farmers_Carry_200m = as.numeric(Farmers_Carry_200m),
+    Sandbag_Lunges_100m = as.numeric(Sandbag_Lunges_100m),
+    Wall_Balls = as.numeric(Wall_Balls),
+    # Total time to seconds
+    Total_Time = as.numeric(Total_Time),
+    Early_Run_Mean = rowMeans(across(all_of(run_cols[1:4]), as.numeric), na.rm = TRUE),
+    Later_Run_Mean = rowMeans(across(all_of(run_cols[5:8]), as.numeric), na.rm = TRUE),
+    Slowdown_Percentage = 100 * (Later_Run_Mean - Early_Run_Mean) / Early_Run_Mean
+  )
+combined_pro_clean[all_time_cols] %>% head()
+analysis_data[all_time_cols] %>% head()
+```
+
+#### Correlation Analysis 
+
+Spearman rank correlation is used to assess the strength and direction of association between continuous variables as split times are non-normal, continuous and less affected by extreme outliers.
+
+Spearman rank correlation between later run mean with each possible half-race factors: early run mean and first 4 functional stations (SkiErg, Sled Push, Sled Pull, Burpee Broad Jump) to determine the strength of correlation.
+
+```{R}
+analysis_data %>%
+  group_by(Division) %>%
+  summarise(
+    Run_Spearman = cor(Early_Run_Mean, Later_Run_Mean, method = "spearman"),
+    Ski_Spearman = cor(SkiErg_1000m, Later_Run_Mean, method = "spearman"),
+    SPush_Spearman = cor(Sled_Push_50m, Later_Run_Mean, method = "spearman"),
+    SPull_Spearman = cor(Sled_Pull_50m, Later_Run_Mean, method = "spearman"),
+    BBJ_Spearman = cor(Burpee_Broad_Jump_80m, Later_Run_Mean, method = "spearman"),
+    .groups = "drop"
+  ) %>%
+  pivot_longer(
+    cols = ends_with("_Spearman"),
+    names_to = "Predictor",
+    values_to = "Rvalue"
+  ) %>%
+  mutate(
+    Predictor = str_remove(Predictor, "_Spearman")
+  ) %>%
+  arrange(Division, desc(Rvalue))
+```
+
+For female, we observe early run mean time has the strongest correlation with later run mean (women: r=0.742), followed by burpee broad (r=0.266) and sled pull (r=0.200). Whereas for male, we observe early run mean time has the strongest correlation with later run mean (r=0.652), followed by burpee broad jump (r=0.150) and sled pull (r=0.100).
+
+Below is a stacked scatterplot of later run mean versus early run mean with a linear trend line.
+
+```{R}
+ggplot(analysis_data, 
+       aes(
+         x = Early_Run_Mean, 
+         y = Later_Run_Mean, 
+         color = Division)
+      ) +
+  geom_point(alpha = 0.15, size = 0.9) +
+  geom_smooth(method = "lm", color = "black", e = FALSE, linewidth = 1) +
+  facet_wrap(~ Division, nrow = 2) +
+  scale_color_manual(values = c("FEMALE HYROX PRO" = "#E377C2", "MALE HYROX PRO" = "#1F77B4")) +
+  labs(
+    title = "Later Run Mean versus Early Run Mean",
+    x = "Mean Runs 1–4 (seconds)",
+    y = "Mean Runs 5–8 (seconds)",
+    color = "Division"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.minor = element_blank(),
+    legend.position = "top",
+    plot.title = element_text(face = "bold"),
+    plot.subtitle = element_text(size = 9, color = "gray30")
+  )
+```
+
+From above, we see a clear linear trend across both division. This hints us that the predictive analysis can use a linear regression to produce a model that predicts later run mean from early run mean.
+
+## Predictive Analysis
+
+The goal is to produce a model that with closest prediction on later-run performance (mean of Runs 5–8) at the mid-race checkpoint using a single or a combination of factors from: early run mean (run 1-4) and first 4 functional stations (SkiErg, Sled Push, Sled Pull, Burpee Broad Jump).
+
+We will use supervised machine learning techniques of linear regression.............
+
+First, we will produce 3 linear regression models:
+
+- Model 1: early run mean only
+
+- Model 2: combination of early run mean with burpee broad jump
+
+- Model 3: combination of early run mean with burpee broad jump and sled pull
+
+- Model 4: combination of early mean run and all 4 functional stations.
+
+Afterwards, we will analyse the 4 linear regression model diagnostics by their residual vs fitted to check for non-linearity and homoscedasticity (constant variance of residuals). This step is to check if we potentially need to transform variables (into log, square root or polynomial).
+
+Then, we compare and evaluate the 4 models using cross-validation based on RMSE, R2 and MAE.
+
+Lastly, we conclude the best models and suggest alternative division-based model is required.
+
+### 1. Linear regression models
+
+#### Model 1: early run mean only
+
+```{R}
+model1 <- lm(Later_Run_Mean ~ Early_Run_Mean * Division, data = analysis_data)
+
+summary(model1)
+```
+
+#### Model 2: early run mean + burpee broad jump
+
+```{R}
+model2 <- lm(Later_Run_Mean ~ (Early_Run_Mean + Burpee_Broad_Jump_80m) * Division, data = analysis_data)
+
+summary(model2)
+```
+
+#### Model 3: early run mean + ski + burpee broad jump + sled pull
+
+```{R}
+model3 <- lm(Later_Run_Mean ~ (Early_Run_Mean + SkiErg_1000m + Burpee_Broad_Jump_80m + Sled_Pull_50m) * Division, data = analysis_data)
+
+summary(model3)
+```
+
+#### Model 4: early mean run + all 4 functional stations
+
+```{R}
+model4 <- lm(Later_Run_Mean ~ (Early_Run_Mean + SkiErg_1000m + Sled_Push_50m + Sled_Pull_50m + Burpee_Broad_Jump_80m) * Division, data = analysis_data)
+
+summary(model4)
+```
+
+### 2. Linear regression diagnostics with residual vs fitted plot
+
+```{R}
+
+plot(fitted(model1), resid(model1), xlab = "Fitted values", ylab = "Residuals", main = "Model 1: Residuals vs Fitted")
+plot(fitted(model2), resid(model2), xlab = "Fitted values", ylab = "Residuals", main = "Model 1: Residuals vs Fitted")
+plot(fitted(model3), resid(model3), xlab = "Fitted values", ylab = "Residuals", main = "Model 1: Residuals vs Fitted")
+plot(fitted(model4), resid(model4), xlab = "Fitted values", ylab = "Residuals", main = "Model 1: Residuals vs Fitted")
+
+```
+
+```{R}
+# Helper function to create individual ggplots
+make_diag_plot <- function(model, title_name) {
+  # Fitted = x-value, Residual = y-value
+  df <- tibble(
+    Fitted = fitted(model),
+    Residual = resid(model)
+  )
+  
+  ggplot(df, aes(x = Fitted, y = Residual)) +
+    geom_point(alpha = 0.2, size = 0.9) +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+    labs(title = title_name, x = "Fitted values", y = "Residuals") +
+    theme_minimal()
+}
+
+# Generate individual plots
+p1 <- make_diag_plot(model1, "Model 1")
+p2 <- make_diag_plot(model2, "Model 2")
+p3 <- make_diag_plot(model3, "Model 3")
+p4 <- make_diag_plot(model4, "Model 4")
+
+# Draw and display the 2x2 layout on screen (run all in on go)
+grid.newpage()
+pushViewport(viewport(layout = grid.layout(
+  nrow = 3, 
+  ncol = 2, 
+  heights = unit(c(0.1, 0.45, 0.45), "npc")
+)))
+
+grid.text(
+  "Residuals vs Fitted Values Across Models", 
+  vp = viewport(layout.pos.row = 1, layout.pos.col = 1:2),
+  gp = gpar(fontsize = 12)
+)
+
+print(p1, vp = viewport(layout.pos.row = 2, layout.pos.col = 1))
+print(p2, vp = viewport(layout.pos.row = 2, layout.pos.col = 2))
+print(p3, vp = viewport(layout.pos.row = 3, layout.pos.col = 1))
+print(p4, vp = viewport(layout.pos.row = 3, layout.pos.col = 2))
+```
+
+All 4 models shows random scatter around horizontal axis with no distinct trends, curved or U-shape. This suggests that all models are well-fitted and capture the linear relationship adequately.
+
+### 3. Evaluating models using cross-validation (10 folds)
+
+```{R}
+# Define eac models linear formula
+f1 <- Later_Run_Mean ~ Early_Run_Mean * Division
+f2 <- Later_Run_Mean ~ (Early_Run_Mean + Burpee_Broad_Jump_80m) * Division
+f3 <- Later_Run_Mean ~ (Early_Run_Mean + Burpee_Broad_Jump_80m + Sled_Pull_50m) * Division
+f4 <- Later_Run_Mean ~ (Early_Run_Mean + SkiErg_1000m + Sled_Push_50m +
+                          Sled_Pull_50m + Burpee_Broad_Jump_80m) * Division
+```
+
+```{R}
+# Set up cross-validation
+set.seed(5145) # for reproduceability 
+
+# Put 4 formulas into a list
+forms <- list(M1 = f1, M2 = f2, M3 = f3, M4 = f4)
+
+# Apply train() onto each element in list
+fits <- lapply(
+  forms,
+  function(f)
+    train(
+      f, 
+      data = model_data, 
+      method = "lm", 
+      trControl = train_control
+    )
+)
+
+# Observe when we index a model from fits (eg: model 1), what fields do we have to enable us to obtain RMSE, MAE and R2 based on division
+fits$M1$pred %>% head()
+fits$M1
+```
+
+```{R}
+# Currently, fits contain RMSE, MAE, R2 for all M1, M2, M3, M4. 
+# We want to identify each based on division.
+# Helper function to compute RMSE, MAE, R2 based on division:
+# RMSE = sqrt(avg sum of (pred - obs)^2)
+# MAE = avg of abs(pred - obs)
+# R2 = 1 - sum((pred - obs)^2) / sum((obs - avg of(obs))^2)
+per_division <- function(fit, label) {
+  fit$pred %>%
+    mutate(
+      Division = model_data$Division[rowIndex]
+    ) %>%
+    group_by(Division) %>%
+    summarise(
+      RMSE = sqrt(mean((pred - obs)^2)),
+      MAE  = mean(abs(pred - obs)),
+      R2   = 1 - sum((pred - obs)^2) / sum((obs - mean(obs))^2)
+    ) %>%
+    mutate(
+      Model = label
+    )
+}
+
+results <- bind_rows(
+  lapply(
+    names(fits),
+    function(n) per_division(fits[[n]], n)
+  )
+)
+
+results %>% arrange(Division, Model)
+```
+
+\
+We obtained all RMSE, MAE and R2 of each model by division:
