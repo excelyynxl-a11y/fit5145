@@ -9,7 +9,7 @@ author: Lim Excelyynx (34476245)
 
 ## Dataset Source
 
-In this demonstration, the datasets are obtained by websracping and saved into csv files named:
+In this demonstration, the datasets are obtained by websrcaping and saved into csv files named:
 
 - hyrox_season8_male_pro.csv
 - hyrox_season8_female_pro.csv
@@ -34,6 +34,7 @@ Season 8 Male Pro dataset.
 ```{R}
 szn8_male_pro <- read_csv("data/hyrox_season8_male_pro.csv")
 glimpse(szn8_male_pro)
+szn8_male_pro
 ```
 
 Season 8 Female Pro dataset.
@@ -189,6 +190,8 @@ Both MALE and FEMALE data exist in the combined dataset.
 
 ## Descriptive Analysis
 
+For descriptive analysis, we will show
+
 ### 1. Running trajectory and slowdown
 
 ```{R}
@@ -256,7 +259,11 @@ ggplot(run_summary, aes(x = Run_Num, y = Median_Sec, color = Division, fill = Di
 
 A general observation we see is female split time is higher than males. The overall trend of split time as the race progresses is almost identical across both division – run split time increases per station.
 
-### 2. Slowdown summary and early–later association
+### 2. Station time split distribution
+
+Here, we want to observe the pattern of time split distribution of all 8 functional stations to determine if any pattern exist.
+
+### 3. Slowdown summary and early–later association
 
 Here, we want to analyse if early run split time is associated to later run split time.
 
@@ -291,7 +298,7 @@ combined_pro_clean[all_time_cols] %>% head()
 analysis_data[all_time_cols] %>% head()
 ```
 
-#### Correlation Analysis 
+#### Correlation Analysis
 
 Spearman rank correlation is used to assess the strength and direction of association between continuous variables as split times are non-normal, continuous and less affected by extreme outliers.
 
@@ -409,16 +416,7 @@ model4 <- lm(Later_Run_Mean ~ (Early_Run_Mean + Burpee_Broad_Jump_80m + Sled_Pul
 summary(model4)
 ```
 
-### 2. Linear regression diagnostics with residual vs fitted plot
-
-```{R}
-
-plot(fitted(model1), resid(model1), xlab = "Fitted values", ylab = "Residuals", main = "Model 1: Residuals vs Fitted")
-plot(fitted(model2), resid(model2), xlab = "Fitted values", ylab = "Residuals", main = "Model 1: Residuals vs Fitted")
-plot(fitted(model3), resid(model3), xlab = "Fitted values", ylab = "Residuals", main = "Model 1: Residuals vs Fitted")
-plot(fitted(model4), resid(model4), xlab = "Fitted values", ylab = "Residuals", main = "Model 1: Residuals vs Fitted")
-
-```
+### 2. Linear regression diagnostics using residual vs fitted plot
 
 ```{R}
 # Helper function to create individual ggplots
@@ -481,13 +479,22 @@ set.seed(5145) # for reproduceability
 # Put 4 formulas into a list
 forms <- list(M1 = f1, M2 = f2, M3 = f3, M4 = f4)
 
+folds <- createFolds(analysis_data$Division, k = 10, returnTrain = TRUE)
+
+train_control <- trainControl(
+  method = "cv",
+  number = 10,
+  index = folds,
+  savePredictions = "final"
+)
+
 # Apply train() onto each element in list
 fits <- lapply(
   forms,
   function(f)
     train(
       f, 
-      data = model_data, 
+      data = analysis_data, 
       method = "lm", 
       trControl = train_control
     )
@@ -509,33 +516,31 @@ cv_results
 
 We observed:
 
-- RMSE and MAE decreases from model 1 to 4, indicating adding functional station as factors reduces the difference in model prediction to actual value. However, the decreament is not significant.
+- RMSE and MAE decreases from model 1 (RMSE=15.960; MAE=12.403) to model 4 (RMSE=15.855; MAE=12.333), indicating adding functional station as factors reduces the difference in model prediction to actual value. However, the decrement is not significant.
 
-- R2 increases from model 1 to 4, meaning adding functional stations as factor improve the percentage of how much variation in later run mean is explainable by model. Similarly, the increment is not significant.
+- R2 increases from model 1 (R2=0.704) to model 4 (R2=0.708), meaning adding functional stations as factor improve the percentage of how much variation in later run mean is explainable by model. Similarly, the increment is not significant.
 
-- Since adding more factors into a model does not produce significantly better prediction, sticking to a simpler model is sufficient. Hence, model 1 (early run mean only as predictor of later run mean) is chosen. Model 1 can explain 70% of variation in later run time, with an average of 12.4s absolute differences between model predictions and atheletes actual later run mean values.
-
-```{R}
-anova(model1, model2, model3, model4)
-```
+- Since adding more factors into a model does not produce significantly better prediction, sticking to a simpler model is sufficient. Hence, model 1 (early run mean only as predictor of later run mean) is chosen. Model 1 can explain 70% of variation in later run time, with an average of 12.4s absolute differences between model predictions and athletes actual later run mean values.
 
 ```{R}
 fits$M1$pred %>%
-  mutate(Division = model_data$Division[rowIndex]) %>%
+  mutate(
+    Division = analysis_data$Division[rowIndex]
+  ) %>%
   ggplot(aes(x = pred, y = obs, colour = Division)) +
+  facet_wrap(~ Division, nrow=1) +
   geom_point(alpha = 0.6) +
-  geom_abline(slope = 1, intercept = 0, linetype = "dashed") +
-  labs(x = "Predicted later run mean", y = "Actual later run mean") +
+  geom_abline(
+    slope = 1, 
+    intercept = 0, 
+    linetype = "dashed"
+  ) +
+  labs(
+    title = "Model 1: Early run mean only",
+    x = "Predicted later run mean", 
+    y = "Actual later run mean"
+  ) +
   theme_minimal()
 ```
 
-```{R}
-ggplot(analysis_data, aes(x = Early_Run_Mean, y = Later_Run_Mean, colour = Division)) +
-  geom_point(alpha = 0.6) +
-  geom_smooth(method = "lm", se = TRUE, colour = "black") +
-  facet_wrap(~ Division, nrow = 2) +
-  labs(x = "Early run mean (Run1-4, seconds)",
-       y = "Later run mean (Run5-8, seconds)",
-       title = "Early vs later run pace by division") +
-  theme_minimal()
-```
+### 4 . Conclusion
