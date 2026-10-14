@@ -34,7 +34,6 @@ Season 8 Male Pro dataset.
 ```{R}
 szn8_male_pro <- read_csv("data/hyrox_season8_male_pro.csv")
 glimpse(szn8_male_pro)
-szn8_male_pro
 ```
 
 Season 8 Female Pro dataset.
@@ -91,7 +90,7 @@ Check for any NA values
 time_fomatted_male %>% filter(if_any(everything(), is.na))
 ```
 
-We observed 784 rows contain NA values. Since only a small fraction (784 out of 12500 rows) of cases have several missings, we will drop these cases.
+We observed 784 rows contain NA values. Since only a small fraction (784 out of 12400 rows) of cases have several missings, we will drop these cases.
 
 Check distinct City.
 
@@ -148,6 +147,10 @@ time_fomatted_female <- szn8_female_pro %>%
 glimpse(time_fomatted_female)
 ```
 
+```{R}
+time_fomatted_female %>% filter(if_any(everything(), is.na))
+```
+
 Dropping cases and imputing values.
 
 ```{R}
@@ -188,9 +191,9 @@ combined_pro_clean %>% filter(Division == "FEMALE HYROX PRO") %>% head()
 
 Both MALE and FEMALE data exist in the combined dataset.
 
-## Descriptive Analysis
+## Exploratory Data Analysis
 
-For descriptive analysis, we will show
+For EDA as part of descriptive analysis, we will reveal the run time in relation to their station, relationship between early run mean and later run mean.
 
 ### 1. Running trajectory and slowdown
 
@@ -259,11 +262,7 @@ ggplot(run_summary, aes(x = Run_Num, y = Median_Sec, color = Division, fill = Di
 
 A general observation we see is female split time is higher than males. The overall trend of split time as the race progresses is almost identical across both division – run split time increases per station.
 
-### 2. Station time split distribution
-
-Here, we want to observe the pattern of time split distribution of all 8 functional stations to determine if any pattern exist.
-
-### 3. Slowdown summary and early–later association
+### 2. Slowdown summary and early–later association
 
 Here, we want to analyse if early run split time is associated to later run split time.
 
@@ -298,9 +297,9 @@ combined_pro_clean[all_time_cols] %>% head()
 analysis_data[all_time_cols] %>% head()
 ```
 
-#### Correlation Analysis
+## Correlation Analysis
 
-Spearman rank correlation is used to assess the strength and direction of association between continuous variables as split times are non-normal, continuous and less affected by extreme outliers.
+Spearman rank correlation is used to assess the strength and direction of association between continuous variables as split times are continuous and less affected by extreme outliers.
 
 Spearman rank correlation between later run mean with each possible half-race factors: early run mean and first 4 functional stations (SkiErg, Sled Push, Sled Pull, Burpee Broad Jump) to determine the strength of correlation.
 
@@ -352,7 +351,7 @@ ggplot(analysis_data,
   theme_minimal(base_size = 12) +
   theme(
     panel.grid.minor = element_blank(),
-    legend.position = "top",
+    legend.position = "none",
     plot.title = element_text(face = "bold"),
     plot.subtitle = element_text(size = 9, color = "gray30")
   )
@@ -360,7 +359,7 @@ ggplot(analysis_data,
 
 From above, we see a clear linear trend across both division. This hints us that the predictive analysis can use a linear regression to produce a model that predicts later run mean from early run mean.
 
-## Predictive Analysis
+## Linear Regression
 
 The goal is to produce a model that with closest prediction on later-run performance (mean of Runs 5–8) at the mid-race checkpoint using a single or a combination of factors from: early run mean (run 1-4) and first 4 functional stations (SkiErg, Sled Push, Sled Pull, Burpee Broad Jump).
 
@@ -382,9 +381,7 @@ Then, we compare and evaluate the 4 models using cross-validation based on RMSE,
 
 Lastly, we conclude the best models and suggest alternative division-based model is required.
 
-### 1. Linear regression models
-
-#### Model 1: early run mean only
+### A) Model 1: early run mean only
 
 ```{R}
 model1 <- lm(Later_Run_Mean ~ Early_Run_Mean * Division, data = analysis_data)
@@ -392,7 +389,7 @@ model1 <- lm(Later_Run_Mean ~ Early_Run_Mean * Division, data = analysis_data)
 summary(model1)
 ```
 
-#### Model 2: early run mean + burpee broad jump
+### B) Model 2: early run mean + burpee broad jump
 
 ```{R}
 model2 <- lm(Later_Run_Mean ~ (Early_Run_Mean + Burpee_Broad_Jump_80m) * Division, data = analysis_data)
@@ -400,7 +397,7 @@ model2 <- lm(Later_Run_Mean ~ (Early_Run_Mean + Burpee_Broad_Jump_80m) * Divisio
 summary(model2)
 ```
 
-#### Model 3: early run mean + burpee broad jump + sled pull
+### C) Model 3: early run mean + burpee broad jump +sled pull
 
 ```{R}
 model3 <- lm(Later_Run_Mean ~ (Early_Run_Mean + Burpee_Broad_Jump_80m + Sled_Pull_50m) * Division, data = analysis_data)
@@ -408,7 +405,7 @@ model3 <- lm(Later_Run_Mean ~ (Early_Run_Mean + Burpee_Broad_Jump_80m + Sled_Pul
 summary(model3)
 ```
 
-#### Model 4: early mean run + all 4 functional stations
+### D) Model 4: early run mean + all 4 functional stations
 
 ```{R}
 model4 <- lm(Later_Run_Mean ~ (Early_Run_Mean + Burpee_Broad_Jump_80m + Sled_Pull_50m + SkiErg_1000m + Sled_Push_50m) * Division, data = analysis_data)
@@ -416,7 +413,7 @@ model4 <- lm(Later_Run_Mean ~ (Early_Run_Mean + Burpee_Broad_Jump_80m + Sled_Pul
 summary(model4)
 ```
 
-### 2. Linear regression diagnostics using residual vs fitted plot
+## Linear regression diagnostics using residual vs fitted plot
 
 ```{R}
 # Helper function to create individual ggplots
@@ -462,7 +459,9 @@ print(p4, vp = viewport(layout.pos.row = 3, layout.pos.col = 2))
 
 All 4 models shows random scatter around horizontal axis with no distinct trends, curved or U-shape. This suggests that all models are well-fitted and capture the linear relationship adequately.
 
-### 3. Evaluating models using cross-validation (10 folds)
+### 
+
+## Model evalutation using cross-validation (10 folds)
 
 ```{R}
 # Define each models linear formula
@@ -543,4 +542,6 @@ fits$M1$pred %>%
   theme_minimal()
 ```
 
-### 4 . Conclusion
+### 
+
+## Conclusion
