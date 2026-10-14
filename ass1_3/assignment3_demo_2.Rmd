@@ -293,8 +293,8 @@ analysis_data <- combined_pro_clean %>%
     Later_Run_Mean = rowMeans(across(all_of(run_cols[5:8]), as.numeric), na.rm = TRUE),
     Slowdown_Percentage = 100 * (Later_Run_Mean - Early_Run_Mean) / Early_Run_Mean
   )
-combined_pro_clean[all_time_cols] %>% head()
-analysis_data[all_time_cols] %>% head()
+
+analysis_data %>% select(Name, Early_Run_Mean, Later_Run_Mean) %>% head()
 ```
 
 ## Correlation Analysis
@@ -515,7 +515,7 @@ cv_results
 
 We observed:
 
-- RMSE and MAE decreases from model 1 (RMSE=15.960; MAE=12.403) to model 4 (RMSE=15.855; MAE=12.333), indicating adding functional station as factors reduces the difference in model prediction to actual value. However, the decrement is not significant.
+- RMSE and MAE decreases from model 1 (RMSE=15.960; MAE=12.403) to model 4 (RMSE=15.855; MAE=12.333), indicating adding functional station as factors reduces the difference in model prediction to actual value. However, the decrease is not significant.
 
 - R2 increases from model 1 (R2=0.704) to model 4 (R2=0.708), meaning adding functional stations as factor improve the percentage of how much variation in later run mean is explainable by model. Similarly, the increment is not significant.
 
