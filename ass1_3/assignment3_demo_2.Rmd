@@ -297,6 +297,42 @@ analysis_data <- combined_pro_clean %>%
 analysis_data %>% select(Name, Early_Run_Mean, Later_Run_Mean) %>% head()
 ```
 
+The slowdown percentage quantifies pace collapse. The median athlete slows by about 7.6% from the early to the later half in both divisions, with an interquartile range of roughly 3–13% and a long right tail of severe collapses.
+
+```{R}
+slowdown_summary <- analysis_data %>%
+  group_by(Division) %>%
+  summarise(
+    Median_Slowdown_Pct = median(Slowdown_Percentage),
+    Q1_Slowdown_Pct = quantile(Slowdown_Percentage, 0.25),
+    Q3_Slowdown_Pct = quantile(Slowdown_Percentage, 0.75),
+    .groups = "drop"
+  )
+
+slowdown_summary
+```
+
+```{R}
+ggplot(analysis_data, aes(x = Slowdown_Percentage, fill = Division)) +
+  geom_histogram(binwidth = 1, alpha = 0.6, position = "identity", color = "white") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray40") +
+  scale_fill_manual(values = c("FEMALE HYROX PRO" = "#E377C2", "MALE HYROX PRO" = "#1F77B4")) +
+  labs(
+    title = "Distribution of Pace Collapse",
+    subtitle = "Slowdown percentage from early run mean (Runs 1-4) to later run mean (Runs 5-8)",
+    x = "Slowdown (%)",
+    y = "Athletes",
+    fill = "Division"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    panel.grid.minor = element_blank(),
+    legend.position = "top",
+    plot.title = element_text(face = "bold"),
+    plot.subtitle = element_text(size = 9, color = "gray30")
+  )
+```
+
 ## Correlation Analysis
 
 Spearman rank correlation is used to assess the strength and direction of association between continuous variables as split times are continuous and less affected by extreme outliers.
@@ -327,7 +363,7 @@ early_spearman_summary <- analysis_data %>%
 early_spearman_summary
 ```
 
-For female, we observe early run mean time has the strongest correlation with later run mean (women: r=0.742), followed by burpee broad (r=0.266) and sled pull (r=0.200). Whereas for male, we observe early run mean time has the strongest correlation with later run mean (r=0.652), followed by burpee broad jump (r=0.150) and sled pull (r=0.100).
+For female, we observe early run mean time has the strongest correlation with later run mean (women: r=0.742), followed by burpee broad (r=0.266) and sled pull (r=0.200). Whereas for male, we observe early run mean time has the strongest correlation with later run mean (r=0.652), followed by burpee broad jump (r=0.150) and sled pull (r=0.100). The remaining stations show weak-to-near-zero correlations (SkiErg: 0.128 female, -0.005 male; Sled Push: 0.091 female, 0.015 male), ranking last and therefore entering the model ladder only in Model 4.
 
 Below is a stacked scatterplot of later run mean versus early run mean with a linear trend line.
 
@@ -513,13 +549,42 @@ cv_results <- bind_rows(
 cv_results
 ```
 
+```{R}
+# Naive persistence baseline: predict later run mean equal to early run mean
+persistence_baseline <- analysis_data %>%
+  mutate(
+    Persistence_Pred = Early_Run_Mean,
+    Abs_Error = abs(Later_Run_Mean - Persistence_Pred),
+    Sq_Error = (Later_Run_Mean - Persistence_Pred)^2
+  )
+
+persistence_baseline %>%
+  group_by(Division) %>%
+  summarise(
+    Persistence_RMSE = sqrt(mean(Sq_Error)),
+    Persistence_MAE = mean(Abs_Error),
+    .groups = "drop"
+  ) %>%
+  bind_rows(
+    tibble(
+      Division = "OVERALL",
+      Persistence_RMSE = sqrt(mean(persistence_baseline$Sq_Error)),
+      Persistence_MAE = mean(persistence_baseline$Abs_Error)
+    )
+  )
+```
+
 We observed:
 
-- RMSE and MAE decreases from model 1 (RMSE=15.960; MAE=12.403) to model 4 (RMSE=15.855; MAE=12.333), indicating adding functional station as factors reduces the difference in model prediction to actual value. However, the decrease is not significant.
+- The naive persistence baseline (predicting later run mean equal to early run mean) yields RMSE = 25.09 and MAE = 20.84 overall. Model 1 improves on this baseline by 36% (RMSE) and 40% (MAE), confirming that early run mean carries genuine information about later-run performance rather than merely echoing the athlete's general pace.
 
-- R2 increases from model 1 (R2=0.704) to model 4 (R2=0.708), meaning adding functional stations as factor improve the percentage of how much variation in later run mean is explainable by model. Similarly, the increment is not significant.
+- RMSE and MAE decrease only marginally from model 1 (RMSE=15.96; MAE=12.40) to model 4 (RMSE=15.86; MAE=12.33) — an improvement of about 0.1 seconds. Adding functional stations as factors reduces the difference between prediction and actual value, but the improvement is practically negligible.
 
-- Since adding more factors into a model does not produce significantly better prediction, sticking to a simpler model is sufficient. Hence, model 1 (early run mean only as predictor of later run mean) is chosen. Model 1 can explain 70% of variation in later run time, with an average of 12.4s absolute differences between model predictions and athletes actual later run mean values.
+- R2 increases from model 1 (R2=0.704) to model 4 (R2=0.708), meaning adding functional stations marginally improves the percentage of how much variation in later run mean is explainable by model. The increment is likewise negligible.
+
+- Since adding more factors does not deliver a substantive improvement, the parsimony principle selects model 1 (early run mean only as predictor of later run mean). Model 1 can explain 70% of variation in later run time, with an average of 12.4s absolute differences between model predictions and athletes' actual later run mean values.
+
+Why do the functional stations add so little? Running carries most of the predictive signal, while the first-half stations measure distinct physical capacities that correlate only weakly with later-run pace (r = 0.10–0.27). The remaining \~30% of unexplained variation reflects factors absent from the data — individual fatigue resistance, venue and weather, penalty times embedded in splits, and age-group heterogeneity within the pro division.
 
 ```{R}
 fits$M1$pred %>%
