@@ -104,25 +104,23 @@ If the project expands, live streams, multi-season history or a larger event cat
 
 #### 4.2 Data Analysis Approach
 
-The overall approach is designed for individual pro divisions across any HYROX season and event, and covers seven stages from data preparation to model selection. The demonstration (Section 4.3) applies the core of this approach to a subset — the Season 8 Pro male and female datasets — as feasibility evidence; not every stage is exercised there, by design.
+The overall approach is designed for individual pro divisions across any HYROX season and event and covers seven stages from data preparation to model selection. The demonstration section applies the core of this approach to a subset (Season 8 Pro male and female datasets) as feasibility evidence.
 
-1) Data preparation and quality validation: Invalid zero-values and null values are expected, and time format may mix seconds and HMS. All time fields will be standardized into HMS for consistent parsing; missingness will be profiled per field before choosing between imputation and case dropping; and range checks (every split positive and physiologically plausible) will guard against timing or scraping errors.  
-2) Exploratory data analysis: Run-time degradation across the eight runs will be summarised with line plots, and functional-station distributions with box plots, to expose distributions, feature relationships and structural flaws before modelling.  
-3) Feature construction: Early run mean (mean of Runs 1–4) and later run mean (mean of Runs 5–8) operationalise pace collapse. Averaging four runs damps single-split noise, and the early-run features use only splits elapsed by the Station-4 checkpoint.  
-4) Statistical screening: Spearman rank correlation assesses the strength and direction of association between later run mean and each first-half factor (early run mean, first four functional stations). Spearman is chosen over Pearson because split times are non-normal, continuous and less affected by extreme outliers. The resulting ranking orders the model ladder in step (5), so that each added factor isolates its marginal contribution — operationalising the project's third goal.  
-5) Model family and candidates: Linear regression is chosen because coefficients are interpretable in seconds for a coach-facing product, variance is low at the expected sample size, and the exploratory relationship is expected to be near-linear. Division interaction terms acknowledge that male and female pros fatigue differently. Four nested candidates will be built, from early run mean alone (M1) to early run mean plus all four functional stations (M4). Tree ensembles were considered for potential non-linearity but deferred: the linear family is preferred first for interpretability and deployment simplicity, with a non-linear benchmark reserved as an enhancement.  
-6) Diagnostics: Residual-vs-fitted graphs check linearity and homoscedasticity (curved, funnel or clustered patterns would trigger log, square-root or polynomial transformations); Q-Q plots and Cook's distance will additionally screen normality and influential points.  
-7) Validation and selection: 10-fold cross-validation, rather than a single holdout, gives a lower-variance error estimate and is data-efficient at this sample size. RMSE penalises large errors, MAE is interpretable in seconds, and R2 expresses relative fit. Selection follows the parsimony principle: the simplest model is chosen unless added factors deliver a substantive error reduction.
+1) Data preparation and quality validation: Invalid zero-values and null values are expected, and time format may mix seconds and HMS. All time fields will be standardized into HMS for consistent parsing, missingness will be profiled per field before choosing between imputation and case dropping and range checks will guard against timing or scraping errors.   
+2) Exploratory data analysis: Run-time degradation across the eight runs will be summarised with line plots and functional-station distributions with box plots, to expose distributions, feature relationships and structural flaws before modelling.  
+3) Feature construction: Early run mean (mean of Runs 1–4) and later run mean (mean of Runs 5–8) operationalise pace collapse. Averaging four runs reduces single-split noise and the early-run features use only splits elapsed by the Station-4 checkpoint.  
+4) Correlation analysis: Spearman rank correlation assesses the strength and direction of association between later run mean and each first-half factor (early run mean, first four functional stations). Spearman is chosen over Pearson because split times are non-normal, continuous and less affected by extreme outliers. The resulting ranking orders the model ladder in step (5), so that each added factor isolates its marginal contribution.  
+5) Model family and candidates: To develop a machine learning model, linear regression is chosen because coefficients are interpretable in seconds for a coach-facing product, variance is low at the expected sample size and the exploratory relationship is expected to be near-linear. Division interaction acknowledges that male and female pros fatigue differently. Four nested candidates will be built, from early run mean alone (model 1\) to early run mean plus all four functional stations (model 4). Regression tree is considered for potential non-linearity but linear regression is preferred first for interpretability and deployment simplicity. A non-linear benchmark reserved as an enhancement.   
+6) Linear regression diagnostics: Residual-vs-fitted graphs check linearity and homoscedasticity (curved, funnel or clustered patterns would require log, square-root or polynomial transformations). Q-Q plots and Cook's distance will additionally screen normality and influential points.  
+7) Model evaluation and selection: 10-fold cross-validation, rather than a single holdout, gives a lower-variance error estimate and is data-efficient at this sample size. RMSE penalises large errors, MAE is interpretable in seconds and R2 expresses relative fit. Selection follows the parsimony principle, which is that the simplest model is chosen unless added factors deliver a substantive error reduction.
 
-Expected outcomes are a strong early-run signal, station splits adding little beyond it — making a parsimony outcome the anticipated finding rather than a disappointment — and a seconds-scale error against later-run durations of roughly 250 seconds as feasibility evidence. Failed diagnostics or a large error would instead trigger feature revision; per-station normalisation and prediction intervals around the forecast are the scoped later-stage extensions of the approach.
+Expected outcomes are a strong early-run signal, station splits adding little beyond it, making a parsimony outcome the anticipated finding and a seconds-scale error against later-run durations of roughly 250 seconds as feasibility evidence. Failed diagnostics or a large error would require feature revision of per-station normalisation and prediction intervals around the forecast are the scoped later-stage extensions of the approach. If diagnostics fail or the error target is unmet, the features and pipeline will be revised by a per-station normalisation (making station splits comparable by rescaling them against their own distributions) and prediction intervals (an uncertainty range around each forecast rather than a single value).
 
 #### 4.3 Demonstration
 
-For the current analysis, RStudio with packages such as  tidyverse, lubridate, caret and hms would suffice to analyse a small static locally downloaded dataset. The usable dataset chosen for the project is obtained from option 1: web scrapped hyrox\_season8\_male\_pro.csv and hyrox\_season8\_female\_pro.csv. This is because its nature has already been filtered by individuals, it contains all time split and division-by-gender information required to identify factors contributing to pacing collapse in late race.
+For the current analysis, RStudio with packages such as  tidyverse, lubridate, caret and hms would suffice to analyse a small static locally downloaded dataset. The usable dataset chosen for the project is obtained from option 1: web scrapped hyrox\_season8\_male\_pro.csv and hyrox\_season8\_female\_pro.csv. 
 
 Download dataset source: [https\://github.com/excelyynxl-a11y/fit5145/tree/main/ass1\_3/data](https://github.com/excelyynxl-a11y/fit5145/tree/main/ass1_3/data)
-
-##### 
 
 ##### 4.3.1 Data Cleaning
 
@@ -144,7 +142,8 @@ From EDA of run split time across run segments, female split time is observed to
 ![][image5]  
 Figure xxx: Run-Time Trajectory of Split Time Against Run Segment
 
-Moreover, we defined 2 new fields called early run mean (mean of run 1-4) and later run mean (mean of run 5-8) of each athlete. Plotting an early run mean against later run mean reveals a  linear relationship is observed between early run mean and later run mean. This hints that linear regression as a suitable machine learning technique to produce a model that predicts later run mean from early run mean.  
+Moreover, we defined 2 new fields called early run mean (mean of run 1-4) and later run mean (mean of run 5-8) of each athlete. Plotting an early run mean against later run mean reveals a  linear relationship is observed between early run mean and later run mean. This hints that linear regression as a suitable machine learning technique to produce a model that predicts later run mean from early run mean.
+
 ![][image6]  
 Figure xxx: Later Run Mean versus Early Run Mean
 
@@ -152,7 +151,7 @@ Figure xxx: Later Run Mean versus Early Run Mean
 
 Spearman rank correlation between later run mean with each possible half-race factors: early run mean and first 4 functional stations (SkiErg, Sled Push, Sled Pull, Burpee Broad Jump) to determine the strength of correlation. For females, we observe early run mean time has the strongest correlation with later run mean (women: r=0.742), followed by burpee broad (r=0.266) and sled pull (r=0.200). Whereas for male, we observe early run mean time has the strongest correlation with later run mean (r=0.652), followed by burpee broad jump (r=0.150) and sled pull (r=0.100).  
 ![][image7]  
-Figure xxx: Spearman R-value on Predictors
+Table xxx: Spearman R-value on Predictors
 
 ##### 4.3.4 Linear regression
 
@@ -167,13 +166,15 @@ Insights from correlation analysis leads to 4 linear regression model proposals:
 | :---- | :---- |
 | ![][image10] Figure xxx: Model 3 | ![][image11] Figure xxx: Model 4 |
 
+##### 
+
 ##### 4.3.5 Linear regression diagnostics
 
 Linear regression diagnostics via residual vs fitted values across all 4 models reveals random scatter around the horizontal axis with no distinct trends, curved or U-shape. This suggests that all models are well-fitted and capture the linear relationship adequately.  
 ![][image12]  
 Figure xxx: Residuals vs Fitted Values Across Models
 
-##### 4.3.5 Model evaluation
+##### 4.3.6 Model evaluation
 
 Cross-validation with 10 folds metrics revealed the following:
 
@@ -184,7 +185,7 @@ Cross-validation with 10 folds metrics revealed the following:
 ![][image13]  
 Figure xxx: Cross-validation Metrics Across 4 Linear Regression Models
 
-##### 4.3.6 Conclusion
+##### 4.3.7 Conclusion
 
 Model 1 (early run mean only as later run mean predictor) is chosen. To visualise the efficacy of the model on predicting late run mean based on early run mean, actual vs predicted later run mean is plotted with model 1 linear regression line.
 
