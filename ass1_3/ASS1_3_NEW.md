@@ -27,141 +27,123 @@ Student ID: 34476245
 
 ### **1.0 Introduction**
 
-HYROX, one of the fastest-growing participation sports globally. Athletes complete eight 1 km runs interleaved with eight functional stations. Participation rose from 570,000 athletes in the 2024/25 season to 1.5 million in 2025/26 (SportsPro, 2026). Race timing systems publish every split, yet this data is used almost entirely retrospectively, to rank finished races without a tool telling athletes during mid-race how much they are likely to slow in the second half.
+HYROX is one of the fastest-growing participation sports globally: athletes complete eight 1 km runs interleaved with eight functional stations, and participation rose from 570,000 athletes in 2024/25 to 1.5 million in 2025/26 (SportsPro, 2026). Timing systems publish every split, yet the data is used almost entirely retrospectively to rank finished races; no tool tells athletes mid-race how much they are likely to slow in the second half.
 
-This project targets that gap with a precise problem: pace collapse, defined as the continuous slowdown from an athlete's early runs (Runs 1–4) to their later runs (Runs 5–8). The testable question is whether splits elapsed by the mid-race checkpoint (after Station 4\) can forecast later-run performance. Three goals of this projects includes (1) describes how run-split times evolve across the eight runs for male and female pro athletes, (2) quantify how strongly the early run mean and the first four functional stations associate with later-run time, (3) build and cross-validate division-aware linear regression models at that checkpoint, and determine whether station splits add predictive value beyond the early run mean alone.
+This project targets that gap: pace collapse, defined as the continuous slowdown from an athlete's early runs (Runs 1–4) to their later runs (Runs 5–8). The testable question is whether splits elapsed by the mid-race checkpoint (after Station 4\) can forecast later-run performance. Three goals: (1) describe how run splits evolve across the eight runs for male and female pro athletes, (2) quantify how strongly the early run mean and first four stations associate with later-run time, and (3) build and cross-validate division-aware linear regression models at that checkpoint to determine whether station splits add predictive value beyond the early run mean alone.
 
 ### **2.0 Related Work**
 
 #### 2.1 Existing projects
 
-Ciappara et al. (2026) provide the closest published analysis of HYROX results: using Pearson’s correlation and multiple linear regression on the top 6,000 Pro-division finishers to quantify how much each race station contributes to overall finish time. Their study is retrospective, explaining a race that has already finished and its outcome is total time rather than second-half slowdown. It cannot answer a mid-race question.
+Ciappara et al. (2026) provide the closest published HYROX analysis: Pearson correlation and multiple linear regression on the top 6,000 Pro finishers, quantifying each station's contribution to overall finish time. It is retrospective and its outcome is total time rather than second-half slowdown, so it cannot answer a mid-race question.
 
-Miyazaki et al. (2025) come closest methodologically, predicting severe late-race slowing in marathon runners from first-half wearable biomechanics on a held-out test subset of 134 runners. However, the approach depends on inertial sensors that typical HYROX athletes do not have and it reduces slowdown to a binary threshold (a pace reduction above 25%), discarding the continuous magnitude that a pacing decision requires.
+Miyazaki et al. (2025) come closest methodologically, predicting severe late-race slowing in marathon runners from first-half wearable biomechanics on a held-out subset of 134 runners. However, it depends on inertial sensors typical HYROX athletes lack and reduces slowdown to a binary threshold (>25% pace reduction), discarding the continuous magnitude a pacing decision requires.
 
-On the commercial side, HyroxDataLab (2026) offers segment percentiles and goal-time pacing tools. These are static, pre-race references: they do not ingest an athlete’s own race and report no validated forecast error.
+Commercially, HyroxDataLab (2026) offers segment percentiles and goal-time pacing tools, but these are static pre-race references: they do not ingest an athlete's own race and report no validated forecast error.
 
 #### 2.2 Novelty
 
-The proposed contribution is a split-only, mid-race checkpoint forecast built on the question on does splits elapsed by the mid-race checkpoint (after Station 4\) carry information about late-race collapse (Runs 5–8)? Against the reviewed work, it extends the state of the art in three concrete ways. First, it forecasts a continuous slowdown magnitude from the athlete's own elapsed splits without specialist sensors, whereas the closest prediction work is wearable-dependent and binary (Miyazaki et al., 2025). Second, the forecast is updated mid-race rather than returned as a static pre-race estimate (HyroxDataLab, 2026). Third, it is validated on a self-collected Season 8 Pro dataset of roughly 23,000 athletes, about four times the sample used in existing HYROX analytics (Ciappara et al., 2026).
+The proposed contribution is a split-only forecast of late-race collapse (Runs 5–8) issued at the mid-race checkpoint (after Station 4\). It extends the state of the art in three concrete ways. First, it forecasts a continuous slowdown magnitude from the athlete's own elapsed splits without specialist sensors, whereas the closest prediction work is wearable-dependent and binary (Miyazaki et al., 2025). Second, the forecast updates mid-race rather than returning a static pre-race estimate (HyroxDataLab, 2026). Third, it is validated on a self-collected Season 8 Pro dataset of roughly 23,000 athletes, about four times the sample used in existing HYROX analytics (Ciappara et al., 2026).
 
 #### 2.3 Importance
 
-An international survey of 418 HYROX athletes found that 49.8% reported at least one injury within 12 months, most commonly at the knee (20.8%) and tendon tissue (41.6%), blaming lack of recovery and pacing strategy (Ketzer et al., 2026). In a sport where entries and tickets generate 55–65% of revenue (SportsPro, 2026), injuries affect participants and the commercial model alike. In a simulated race, peak heart rate, lactate and perceived exertion all occurred at the final station (Brandt et al., 2025), and technique breakdown of 25–35% under fatigue at heavy loaded stations is linked to injury risk (Bauerfeind, n.d.). No study yet connects pacing collapse directly to injury, but the evidence establishes substantial strain concentrated in the race's back half. Having an early-warning signal would inform athletes of any abnormal pace degradation mid-race.
+An international survey of 418 HYROX athletes found 49.8% reported at least one injury within 12 months, most commonly at the knee (20.8%) and tendon tissue (41.6%), blaming lack of recovery and pacing strategy (Ketzer et al., 2026). With entries and tickets generating 55–65% of revenue (SportsPro, 2026), injuries affect participants and the commercial model alike. In a simulated race, peak heart rate, lactate and perceived exertion all occurred at the final station (Brandt et al., 2025), and technique breakdown of 25–35% under fatigue at heavy loaded stations is linked to injury risk (Bauerfeind, n.d.). No study yet connects pacing collapse directly to injury, but substantial strain is concentrated in the race's back half, and an early-warning signal would flag abnormal pace degradation mid-race.
 
-For athletes, an accessible forecast could set realistic expectations and give coaches an objective basis for pacing discussions. For gyms, replaying race trajectories could make debriefs more specific and reduce manual analysis. A free basic report would widen access beyond athletes who purchase specialist sensors. Benefits would be evaluated through prediction error, coach-reported usefulness and analysis time saved; improved retention, injury prevention and faster finishes remain unproven and are not claimed. Alerts must avoid false reassurance or pressure to maintain an unsafe pace.
+Stakeholder benefits are detailed in Section 3.1. They would be evaluated through prediction error, coach-reported usefulness and analysis time saved; improved retention, injury prevention and faster finishes remain unproven and are not claimed, and alerts must avoid false reassurance or pressure to maintain an unsafe pace.
 
 ### **3.0 Business Model**
 
 #### 3.1 Data Business Model
 
-The data business model is analytics-as-a-service. Historical public race results are refined into a derived data product, namely, calibrated pacing forecasts and sold by subscription, rather than reselling raw athlete records. The value chain runs from acquisition (scraped licensed results) and curation (cleaning, normalisation, quality auditing) to modelling (checkpoint forecast) and delivery (a coach-facing report or dashboard). The primary stakeholders are HYROX, which can differentiate its race experience and activate its timing data. Coaches and affiliated gyms are the prospective subscribers, who gain objective pacing evidence instead of manual spreadsheet analysis. Furthermore, athletes are the beneficiaries who receive interpreted pacing guidance. Revenue from subscription, purchase and demand would fund data maintenance, validation and dashboard support.
+The data business model is analytics-as-a-service: historical public race results are refined into a derived data product, namely calibrated pacing forecasts, sold by subscription rather than reselling raw athlete records. The value chain runs from acquisition (scraped licensed results) and curation (cleaning, normalisation, quality auditing) to modelling (checkpoint forecast) and delivery (a coach-facing report or dashboard). The primary stakeholder is HYROX, which can differentiate its race experience and activate its timing data; coaches and affiliated gyms are the prospective subscribers, gaining objective pacing evidence instead of manual spreadsheet analysis; athletes receive interpreted pacing guidance. Subscription revenue funds data maintenance, validation and dashboard support.
 
 #### 3.2 Level of Analytics
 
-The project spans two analytical levels. Descriptive analytics summarises how run splits evolve across the eight runs and quantifies associations between first-half factors (early run mean, functional stations) and later-run time to ground the choice of machine learning technique. Predictive analytics develops division-aware models based on factors with stronger correlation factors to later-run performance such as linear regression models that estimate later-run performance from checkpoint data, then use model evaluation metrics to discuss the suitability and performance of chosen model.
+The project spans two analytical levels. Descriptive analytics summarises how run splits evolve across the eight runs and quantifies associations between first-half factors (early run mean, functional stations) and later-run time, grounding the choice of machine learning technique. Predictive analytics develops division-aware models from the factors most strongly correlated with later-run performance, such as linear regression estimating later-run time from checkpoint data, judged through evaluation metrics.
 
 #### 3.3 Challenges
 
-Several challenges are anticipated. Missing splits are expected to force case dropping and could bias the sample toward complete performances. Penalties, transition (Roxzone) timing, venue layouts and weather can distort apparent slowing yet are not recorded in the data. Commercially, the model depends on HYROX's public results pages, so licensing or access changes pose a business risk and forecasts that athletes act on feed back into the very race data being modelled.
+Several challenges are anticipated. Missing splits force case dropping and could bias the sample toward complete performances. Penalties, Roxzone timing, venue layouts and weather can distort apparent slowing yet are not recorded. Commercially, the model depends on HYROX's public results pages, so licensing or access changes pose a business risk, and forecasts that athletes act on feed back into the very race data being modelled.
 
 ### **4.0 Characterising and Analysing Data**
 
 #### 4.1 Potential Data Source, Characteristics (4V) and Softwares
 
-The first option is the official HYROX Season 8 results, extracted to local CSV using [Python scraper based on imterence's open-source repository](https://github.com/imterence/hyrox_analysis) (imterence, 2025). Two usable datasets can be scraped as hyrox\_season8\_male\_pro.csv and hyrox\_season8\_female\_pro.csv.
+The first option is the official HYROX Season 8 results, extracted to local CSV using a [Python scraper based on imterence's open-source repository](https://github.com/imterence/hyrox_analysis) (imterence, 2025): hyrox\_season8\_male\_pro.csv and hyrox\_season8\_female\_pro.csv.
 
-1) Volume contains 12,400 and 12,500 rows respectively. Each row is an athlete's complete race with 26 attributes (rank, name, age group, division, city, total race time, Roxzone transition time, eight run splits, eight station splits and athlete's URL). Combined volume is small enough for in-memory analysis on a single laptop without requiring a distributed processing platform.  
-2) Variety is a structured tabular data mixing categorical (nominal division, ordinal age group) and numerical types (continuous time splits in strings or HMS, discrete rank).  
-3) Velocity is a static batch data. Results pages are published post-event, scraped once and stored locally as CSV.  
-4) From the veracity aspect, city field is missing for every row, rows with missing splits must be excluded before modelling, penalty times may be embedded in station or Roxzone splits without being flagged and scraping errors is possible.  
-5) Software: Git and VSCode to run the Python scraper and generate the CSV files. RStudio for data storage and analysis.
+1) Volume: 12,400 and 12,500 rows respectively; each row is an athlete's complete race with 26 attributes (identity fields, rank, division, total race time, Roxzone time, eight run splits, eight station splits, URL). Combined volume allows in-memory analysis on a single laptop without a distributed processing platform.  
+2) Variety: structured tabular data mixing categorical (nominal division, ordinal age group) and numerical types (continuous time splits as HMS strings, discrete rank).  
+3) Velocity: static batch data; results pages are published post-event, scraped once and stored as CSV.  
+4) Veracity: city is missing for every row, rows with missing splits must be excluded before modelling, penalty times may be embedded in splits unflagged, and scraping errors are possible.  
+5) Software: Git and VSCode to run the scraper; RStudio for storage and analysis.
 
-The second option is hyrox\_result.csv downloaded from [JGug's Kaggle HYROX results](https://www.kaggle.com/datasets/jgug05/hyrox-results) (JGug, 2024).
+The second option is hyrox\_result.csv from [JGug's Kaggle HYROX results](https://www.kaggle.com/datasets/jgug05/hyrox-results) (JGug, 2024): 92,374 rows mixing pro/open and doubles races, carrying the same splits plus gender and nationality. Variety and velocity match option 1 (saturated, static), but veracity cost is higher: extra filtering to pro individuals is required. Software: Kaggle account; RStudio.
 
-1) Volume contains 92,374 rows mixing individual pro/open and doubles races, carrying the same splits plus gender and nationality.  
-2) Being saturated and static, its variety and velocity matches option 1  
-3) Veracity cost is higher as it requires higher cleaning effort compared to option 1 due to additional filtering to pro individuals.  
-4) Software: Kaggle account to download dataset. RStudio for storage and data analysis.
+The third option is the [HYROX Result API](https://hyroxresultapi.com/), exposing versioned JSON event, athlete and split endpoints (HYROX Result API, 2025). Volume scales across events; variety is semi-structured nested JSON (eg: "/api/v1/athletes/{id}/splits" returns station-by-station splits). Velocity is the differentiator: splits can be requested near real-time, matching the mid-race use case. Veracity requires filtering empty strings and zero-value times and trusting provider provenance. Software: paid subscription, SwaggerUI for live GET requests, VSCode to convert JSON to CSV, RStudio.
 
-The third option is [HYROX Result API](https://hyroxresultapi.com/) exposing versioned JSON event, athlete and split endpoints (HYROX Result API, 2025).
+Technologies are classified by 4 pipeline stages: (1) Acquisition: Python scraper, Kaggle download, REST API calls; (2) Storage: versioned local CSV files, as a managed relational or cloud store is unnecessary at current volume; (3) Processing and analysis: RStudio with libraries (eg: tidyverse, lubridate, hms); (4) Delivery: the analytical report, or a dashboard if the product expands.
 
-1) Volume scales across events.  
-2) Variety is semi-structured endpoints that return nested JSON mixing strings and numbers (eg: "/api/v1/athletes/{id}/splits" gives an athlete's station-by-station splits).  
-3) Velocity is the differentiator as splits can be requested near real-time, which ultimately matches the mid-race use case.  
-4) Veracity requires filtering empty strings and zero-value times and trusting provider provenance.  
-5) Software: Active subscription on ResultAPI HYROX website, SwaggerUI to send live requests (GET methods) and view real-time response, VSCode to collect JSON output from API calls and convert to csv dataset, RStudio for data analysis.
+Option 1 is selected: it arrives pre-filtered to pro individuals, contains all time splits plus the division-by-gender labels required for checkpoint modelling, and needs no paid subscription or extra filtering. Option 2 trades larger nominal volume for heavier cleaning with no modelling gain; option 3 suits expansion rather than the current feasibility demonstration.
 
-Technologies are classified by 4 pipeline stage:
-
-1. Acquisition: Using Python scraper, Kaggle download, REST API calls  
-2. Storage: Versioned local CSV files, managed relational or cloud store is unnecessary at current volume.  
-3. Processing and analysis: Using RStudio with libraries (eg: tidyverse, lubridate, hms).  
-4. Delivery: To showcase the analytical report or a dashboard if the product expands.
-
-Option 1 is selected as it arrives pre-filtered to pro individuals, contains all time splits plus division-by-gender labels required for checkpoint modelling and needs no paid subscription or extra division filtering, while its veracity issues are manageable with the checks above. Option 2 trades a larger nominal volume for heavier cleaning with no modelling gain, and option 3 suits expansion rather than the current feasibility demonstration.
-
-If the project expands, live streams, multi-season history or a larger event catalogue would push volume and velocity beyond file-based storage. A scheduled ingestion pipeline into a managed relational or cloud store, with automated schema and quality tests, would replace static CSV downloads. A paid API subscription would become preferable to maintaining a scraper, subject to cost, licensing and permission checks.
+If the project expands, live streams, multi-season history or a larger event catalogue would push volume and velocity beyond file-based storage: a scheduled ingestion pipeline into a managed store with automated schema and quality tests would replace CSV downloads, and a paid API subscription would replace maintaining a scraper, subject to cost and licensing checks.
 
 #### 4.2 Data Analysis Approach
 
-The overall approach is designed for individual pro divisions across any HYROX season and event and covers seven stages from data preparation to model selection. The demonstration section applies the core of this approach to a subset (Season 8 Pro male and female datasets) as feasibility evidence.
+The overall approach targets individual pro divisions across any HYROX season and event, covering seven stages from data preparation to model selection. The demonstration applies the core of this approach to Season 8 Pro male and female datasets as feasibility evidence.
 
-1) Data preparation and quality validation: Invalid zero-values and null values are expected, and time format may mix seconds and HMS. All time fields will be standardized into HMS for consistent parsing, missingness will be profiled per field before choosing between imputation and case dropping and range checks will guard against timing or scraping errors.  
-2) Exploratory data analysis: Run-time degradation across the eight runs will be summarised with line plots and functional-station distributions with box plots, to expose distributions, feature relationships and structural flaws before modelling.  
-3) Feature construction: Early run mean (mean of Runs 1–4) and later run mean (mean of Runs 5–8) operationalise pace collapse. Averaging four runs reduces single-split noise and the early-run features use only splits elapsed by the Station-4 checkpoint.  
-4) Correlation analysis: Spearman rank correlation assesses the strength and direction of association between later run mean and each first-half factor (early run mean, first four functional stations). Spearman is chosen over Pearson because split times are non-normal, continuous and less affected by extreme outliers. The resulting ranking orders the model ladder in step (5), so that each added factor isolates its marginal contribution.  
-5) Model family and candidates: To develop a machine learning model, linear regression is chosen because coefficients are interpretable in seconds for a coach-facing product, variance is low at the expected sample size and the exploratory relationship is expected to be near-linear. Division interaction acknowledges that male and female pros fatigue differently. Four nested candidates will be built, from early run mean alone (model 1\) to early run mean plus all four functional stations (model 4). Regression tree is considered for potential non-linearity but linear regression is preferred first for interpretability and deployment simplicity. A non-linear benchmark reserved as an enhancement.  
-6) Linear regression diagnostics: Residual-vs-fitted graphs check linearity and homoscedasticity (curved, funnel or clustered patterns would require log, square-root or polynomial transformations). Q-Q plots and Cook's distance will additionally screen normality and influential points.  
-7) Model evaluation and selection: 10-fold cross-validation, rather than a single holdout, gives a lower-variance error estimate and is data-efficient at this sample size. RMSE penalises large errors, MAE is interpretable in seconds and R2 expresses relative fit. Selection follows the parsimony principle, which is that the simplest model is chosen unless added factors deliver a substantive error reduction.
+1) Data preparation and quality validation: Invalid zero/null values are expected and time formats may mix seconds and HMS. All time fields will be standardized to HMS, missingness profiled per field before choosing between imputation and case dropping, and range checks will guard against timing or scraping errors.  
+2) Exploratory data analysis: Line plots of run-time degradation across the eight runs and box plots of station distributions expose distributions, feature relationships and structural flaws.  
+3) Feature construction: Early run mean (Runs 1–4) and later run mean (Runs 5–8) operationalise pace collapse; averaging four runs reduces single-split noise, and early-run features use only splits elapsed by the Station-4 checkpoint.  
+4) Correlation analysis: Spearman rank correlation assesses the association between later run mean and each first-half factor. Spearman is chosen over Pearson because split times are non-normal, continuous and outlier-affected. The ranking orders the model ladder in step (5) so each added factor isolates its marginal contribution.  
+5) Model family and candidates: Linear regression is chosen because coefficients are interpretable in seconds for a coach-facing product, variance is low at the expected sample size and the relationship is near-linear. Division interaction acknowledges that male and female pros fatigue differently. Four nested candidates will be built, from early run mean alone (model 1\) to early run mean plus all four stations (model 4). Regression trees are considered for non-linearity but deferred for interpretability and deployment simplicity.  
+6) Diagnostics: Residual-vs-fitted graphs check linearity and homoscedasticity (curved, funnel or clustered patterns would require log, square-root or polynomial transformations); Q-Q plots and Cook's distance screen normality and influential points.  
+7) Model evaluation and selection: 10-fold cross-validation gives a lower-variance error estimate than a single holdout and is data-efficient at this sample size. RMSE penalises large errors, MAE is interpretable in seconds and R2 expresses relative fit. Selection follows the parsimony principle: the simplest model is chosen unless added factors deliver a substantive error reduction.
 
-Expected outcomes are a strong early-run signal, station splits adding little beyond it, making a parsimony outcome the anticipated finding and a seconds-scale error against later-run durations of roughly 250 seconds as feasibility evidence. Failed diagnostics or a large error would require feature revision of per-station normalisation and prediction intervals around the forecast are the scoped later-stage extensions of the approach. If diagnostics fail or the error target is unmet, the features and pipeline will be revised by a per-station normalisation (making station splits comparable by rescaling them against their own distributions) and prediction intervals (an uncertainty range around each forecast rather than a single value).
+Expected outcomes are a strong early-run signal with station splits adding little beyond it, making parsimony the anticipated finding, and a seconds-scale error against later-run durations of roughly 250 seconds as feasibility evidence. If diagnostics fail or the error target is unmet, the features and pipeline will be revised; per-station normalisation (rescaling station splits against their own distributions) and prediction intervals (an uncertainty range around each forecast) are the scoped later-stage extensions.
 
 #### 4.3 Demonstration
 
-For the current analysis, RStudio with packages such as  tidyverse, lubridate, caret and hms would suffice to analyse a small static locally downloaded dataset. The usable dataset chosen for the project is obtained from option 1: web scrapped hyrox\_season8\_male\_pro.csv and hyrox\_season8\_female\_pro.csv.
+For the current analysis, RStudio with packages such as tidyverse, lubridate, caret and hms suffices for a small, static, locally downloaded dataset. The usable dataset is option 1: web-scraped hyrox\_season8\_male\_pro.csv and hyrox\_season8\_female\_pro.csv.
 
 Download dataset source: [https\://github.com/excelyynxl-a11y/fit5145/tree/main/ass1\_3/data](https://github.com/excelyynxl-a11y/fit5145/tree/main/ass1_3/data)
 
 ##### 4.3.1 Data Cleaning
 
-Initial inspection shows the raw dataset contains 12,400 and 12,500 rows respectively. Time is inconsistently formatted to characters and time. Thus, time split fields are made consistent into time format.
+The raw datasets contain 12,400 and 12,500 rows respectively, with time inconsistently formatted between characters and time objects, so all time split fields are standardised to time format.
 
 | ![][image2] Figure xxxx: hyrox\_season8\_male\_pro.csv Glimpse | ![][image3] Figure xxxx: hyrox\_season8\_female\_pro.csv Glimpse |
 | :---- | :---- |
 
-Before combining the 2 dataset, we mutate division field of hyrox\_season8\_male\_pro.csv and hyrox\_season8\_female\_pro.csv from “HYROX PRO” to “MALE HYROX PRO” and “FEMALE HYROX PRO” respectively rather than creating a new “gender” fields since both dataset already covers pros only division. Cases with null values are dropped instead of imputed because no other fields within the dataset provide information of value to replace null value. Furthermore, the rows with NA values are of a small fraction (784 and 803 rows in each dataset respectively) with cases having several missing in a row.
-
-After formatting time, dropping null cases and combining both dataset, the resulting dataset contains 23,313 rows with all time split formatted.  
+Before combining, Division is mutated from “HYROX PRO” to “MALE HYROX PRO” and “FEMALE HYROX PRO”, rather than creating a new “gender” field, since both datasets cover the pro division only. Null cases are dropped instead of imputed: no other field provides information of value for imputation, and NA rows are a small fraction (784 and 803 respectively), often with several splits missing per row. After formatting, dropping nulls and combining, the resulting dataset contains 23,313 rows with all time splits formatted.  
 ![][image4]  
 Figure xxx: Combined and Cleaned Dataset (combined\_pro\_clean)
 
 ##### 4.3.2 Exploratory Data Analysis
 
-From EDA of run split time across run segments, female split time is observed to be higher than males. The overall trend of split time as the race progresses is almost identical across both divisions: run split time increases across Runs 1–8, with the steepest rise after the first run.
+Female split times are higher than males, but the trend across run segments is almost identical between divisions: run split time increases across Runs 1–8, with the steepest rise after the first run.
 
 ![][image5]  
 Figure xxx: Run-Time Trajectory of Split Time Against Run Segment
 
-Moreover, we defined 2 new fields called early run mean (mean of Runs 1–4) and later run mean (mean of Runs 5–8) of each athlete. Their difference, expressed as a slowdown percentage, quantifies pace collapse: the median athlete slows by 7.6% from the early to the later half in both divisions, with an interquartile range of roughly 3–13% and a long right tail of severe collapses.
+Two new fields are defined: early run mean (mean of Runs 1–4) and later run mean (mean of Runs 5–8). Their difference, expressed as a slowdown percentage, quantifies pace collapse: the median athlete slows by 7.6% from early to later half in both divisions (interquartile range roughly 3–13%), with a long right tail of severe collapses.
 
 ![][image6]  
 Figure xxx: Distribution of Slowdown Percentage by Division
 
-Plotting an early run mean against later run mean reveals a linear relationship between early run mean and later run mean. This hints that linear regression is a suitable machine learning technique to produce a model that predicts later run mean from early run mean.
+Plotting early run mean against later run mean reveals a linear relationship, indicating linear regression is suitable to predict later run mean from early run mean.
 
 ![][image7]  
 Figure xxx: Later Run Mean versus Early Run Mean
 
 ##### 4.3.3 Correlation Analysis
 
-Spearman rank correlation between later run mean with each possible half-race factors: early run mean and first 4 functional stations to determine the strength of correlation. For females, we observe that early run mean time has the strongest correlation with later run mean (r=0.742), followed by burpee broad (r=0.266) and sled pull (r=0.200). Whereas for male, we observe early run mean time has the strongest correlation with later run mean (r=0.652), followed by burpee broad jump (r=0.150) and sled pull (r=0.100). The remaining stations show near-zero correlations, ranking last and therefore entering the model ladder only in Model 4\. The ranking orders the candidate models so that each added factor isolates its marginal contribution.  
+Spearman rank correlation measures the association between later run mean and each first-half factor: early run mean and the first 4 functional stations. For females, early run mean correlates strongest with later run mean (r=0.742), followed by burpee broad jump (r=0.266) and sled pull (r=0.200); for males, the same ordering holds (r=0.652, 0.150 and 0.100 respectively). The remaining stations show near-zero correlations, ranking last and entering the model ladder only in Model 4\. The ranking orders the candidate models so each added factor isolates its marginal contribution.  
 ![][image8]  
 Table xxx: Spearman R-value on Predictors
 
 ##### 4.3.4 Linear regression
 
-Insights from correlation analysis leads to 4 linear regression model proposals:
+The correlation ranking yields 4 nested linear regression models:
 
 1) Model 1: early run mean only  
 2) Model 2: combination of early run mean \+ burpee broad jump  
@@ -176,20 +158,20 @@ Insights from correlation analysis leads to 4 linear regression model proposals:
 
 ##### 4.3.5 Linear regression diagnostics
 
-Linear regression diagnostics via residual vs fitted values across all 4 models reveals random scatter around the horizontal axis with no distinct trends, curved or U-shape. This suggests that all models are well-fitted and capture the linear relationship adequately.  
+Residual vs fitted plots across all 4 models show random scatter around the horizontal axis with no distinct trend, curve or U-shape, suggesting all models are well-fitted and capture the linear relationship adequately.  
 ![][image13]  
 Figure xxx: Residuals vs Fitted Values Across Models
 
 ##### 4.3.6 Model evaluation
 
-Cross-validation with 10 folds metrics revealed the following:
+Cross-validation with 10 folds revealed the following:
 
-1) Against the naive persistence baseline that predicts later run mean equal to early run mean (RMSE=25.09; MAE=20.84), model 1 reduces RMSE by 36% and MAE by 40%, confirming that early run mean carries genuine information about later-run performance rather than just the athlete's general pace.  
-2) RMSE and MAE decrease from model 1 (RMSE=15.96; MAE=12.40) to model 4 (RMSE=15.86; MAE=12.33) by 0.1 seconds. Adding functional stations as factors reduces the difference between prediction and actual value, but the improvement is practically negligible.  
-3) R2 increases from model 1 (R2=0.704) to model 4 (R2=0.708), meaning adding functional stations marginally improves the percentage of how much variation in later run mean is explainable by the model. The increment is likewise negligible.  
-4) Since adding more factors does not deliver a substantive improvement, the parsimony principle selects model 1 (early run mean only as predictor of later run mean). Model 1 can explain 70% of variation in later run time, with an average of 12.4s absolute differences between model predictions and athletes actual later run mean values.
+1) Against the naive persistence baseline predicting later run mean equal to early run mean (RMSE=25.09; MAE=20.84), model 1 reduces RMSE by 36% and MAE by 40%: early run mean carries genuine information about later-run performance beyond general pace.  
+2) RMSE/MAE fall from model 1 (15.96/12.40) to model 4 (15.86/12.33), a gain of only 0.1 seconds: adding functional stations reduces error, but negligibly.  
+3) R2 rises from 0.704 (model 1) to 0.708 (model 4), a likewise negligible increment in explained variation.  
+4) Since added factors deliver no substantive improvement, the parsimony principle selects model 1 (early run mean only), which explains 70% of variation in later run time with an average 12.4s absolute difference between predicted and actual later run means.
 
-The dominance of early run means has a straightforward explanation: running carries most of the race's predictive signal, while the first-half functional stations measure distinct physical capacities that correlate only weakly with later-run pace (r \= 0.10–0.27). The remaining 30% of unexplained variation reflects factors absent from the data, namely individual fatigue resistance, venue and weather conditions, penalty times embedded in splits and age-group heterogeneity within the pro division.
+The dominance of early run mean is explained simply: running carries most of the race's predictive signal, while first-half stations measure distinct physical capacities that correlate only weakly with later-run pace (r \= 0.10–0.27). The remaining 30% of unexplained variation reflects factors absent from the data: individual fatigue resistance, venue and weather conditions, penalty times embedded in splits and age-group heterogeneity within the pro division.
 
 ![][image14]  
 Table xxx: Cross-validation Metrics Across 4 Linear Regression Models
@@ -199,7 +181,7 @@ Table xxx: Persistence Baseline for Interpretation
 
 ##### 4.3.7 Conclusion
 
-Model 1 (early run mean only as later run mean predictor) is chosen. To visualise its efficacy, predicted later run mean is plotted against actual later run mean with an identity reference line. The closer the points to the line, the more accurate the forecast.
+Model 1 (early run mean only) is chosen. To visualise its efficacy, predicted later run mean is plotted against actual with an identity reference line; the closer the points to the line, the more accurate the forecast.
 
 ![][image16]  
 Figure xxx: Predicted versus Actual Later Run Mean using Model 1
@@ -207,7 +189,7 @@ Figure xxx: Predicted versus Actual Later Run Mean using Model 1
 ![][image17]  
 Table xxx: Median Later Run Mean
 
-The demonstration evidences the project's feasibility: a mid-race checkpoint forecast of later-run performance is achievable from elapsed splits alone, with an average error of 12.4 seconds — around 5% of the median later-run mean (241 seconds male, 278 seconds female) — using only data that race timing systems already publish. The main limitations are the 30% of variance unexplained by early splits, a small number of extreme slowdown outliers and generalisation beyond Season 8 pro fields remaining untested.
+The demonstration evidences feasibility: a mid-race checkpoint forecast of later-run performance is achievable from elapsed splits alone, with an average error of 12.4 seconds — around 5% of the median later-run mean (241s male, 278s female) — using only data race timing systems already publish. Main limitations: 30% of variance unexplained by early splits, a small number of extreme slowdown outliers, and untested generalisation beyond Season 8 pro fields.
 
 ##### 
 
@@ -215,16 +197,25 @@ The demonstration evidences the project's feasibility: a mid-race checkpoint for
 
 ##### 5.1 Standard in Data Science Process
 
+The project follows CRISP-DM, a standard data science process: business understanding, data understanding, data preparation, modelling, evaluation and deployment. Business understanding maps to Sections 1–3; data understanding and preparation to stages (1)–(4) of Section 4.2; modelling and evaluation to stages (5)–(7); deployment to the coach-facing forecast product (Section 3.1).
+
 ##### 5.2 Data Governance and management
 
-1. ACCESS, SECURITY & DATA QUALITY  
-- How will you get the data, where will it be stored, who can access it, and how will you check its quality?  
-2. DATA LIFECYCLE  
-- How long will you keep the data, and when/how will it be archived or destroyed?  
-3. REGULATIONS, ETHICS & LICENSING  
-- Which laws, licences and ethics rules apply?  
-4. STAKEHOLDERS & TRANSPARENCY  
-- Who is affected, who is responsible, how will decisions be explained, and what assumptions should be tested?
+##### 5.2.1 Access, Security and Data Quality
+
+Data is scraped from HYROX's public results pages and stored as versioned CSV files in an access-controlled repository: only the owner can write, while it remains publicly readable and downloadable. Quality checks cover a per-split completeness audit, range checks and division-level record counts.
+
+##### 5.2.2 Data Lifecycle
+
+Datasets are kept in the GitHub repository while the project is active; the repository will be made private once the assignment is graded.
+
+##### 5.2.3 Regulation, Ethics and Licensing
+
+The data is public professional performance records, so no special-category data is processed. Scraping is subject to HYROX's terms of use, and commercial reuse requires a licence. Forecasts must not pressure athletes into unsafe pacing or give false reassurance.
+
+##### 5.2.4 Stakeholders and Transparency
+
+Athletes, coaches and HYROX are affected; the project owner is accountable for data accuracy and honest communication of model limitations. Decisions are explained through interpretable outputs (coefficients, parsimony-based selection, documented error metrics). Assumptions to test include that Season 8 results generalise to other seasons and venues, and that penalty times do not systematically distort station splits.
 
 ### **6.0 Appendix**
 
@@ -239,29 +230,32 @@ Figure C: Repository to download dataset for demonstration ([https\://github.com
 
 ### **Reference**
 
+Data Science PM. (2024). What is CRISP DM? Data Science Project Management.   
+[https\://www\.datascience-pm.com/crisp-dm-2/](https://www.datascience-pm.com/crisp-dm-2/) 
+
 SportsPro. (2026). How Hyrox is turning fitness into the world's next mass participation sport.  
 [https\://www\.sportspro.com/features/finance-investment/hyrox-business-model-mass-participation-private-equity-investment/](https://www.sportspro.com/features/finance-investment/hyrox-business-model-mass-participation-private-equity-investment/)
 
 HyroxDataLab. (2026). Data-driven HYROX training & race analysis for all athletes.  
-[https\://hyroxdatalab.com/](https://hyroxdatalab.com/)
+	[https\://hyroxdatalab.com/](https://hyroxdatalab.com/)
 
 Brandt et al. (2025). Acute physiological responses and performance determinants in Hyrox© – a new running-focused high intensity functional fitness trend  
-[https\://pmc.ncbi.nlm.nih.gov/articles/PMC11994925/](https://pmc.ncbi.nlm.nih.gov/articles/PMC11994925/#s2)
+	[https\://pmc.ncbi.nlm.nih.gov/articles/PMC11994925/](https://pmc.ncbi.nlm.nih.gov/articles/PMC11994925/#s2)
 
 Ciappara et al. (2026). Predicting HYROX Performance in Elite Athletes: Station Contributions and Training Implications from Reduced Regression Models  
 [https\://www\.researchgate.net/publication/405274169\_Predicting\_HYROX\_Performance\_in\_Elite\_Athletes\_Station\_Contributions\_and\_Training\_Implications\_from\_Reduced\_Regression\_Models\#full-text](https://www.researchgate.net/publication/405274169_Predicting_HYROX_Performance_in_Elite_Athletes_Station_Contributions_and_Training_Implications_from_Reduced_Regression_Models#full-text)
 
 Miyazaki, Y., et al. (2025). Early marathon running metrics from inertial measurement units predict significant pace reduction. Frontiers in Sports and Active Living,  
-[https\://pmc.ncbi.nlm.nih.gov/articles/PMC12575221](https://pmc.ncbi.nlm.nih.gov/articles/PMC12575221)
+	[https\://pmc.ncbi.nlm.nih.gov/articles/PMC12575221](https://pmc.ncbi.nlm.nih.gov/articles/PMC12575221)
 
 GitHub \- imterence/hyrox\_analysis (2025). Extracted data from https\://results.hyrox.com/ and analysed the podium finishers to the rest of their competition to see what makes them a winner.  
-[https\://github.com/imterence/hyrox\_analysis](https://github.com/imterence/hyrox_analysis)
+	[https\://github.com/imterence/hyrox\_analysis](https://github.com/imterence/hyrox_analysis)
 
 Ketzer et al. (2026). Injury epidemiology in HYROX athletes: an international cross-sectional survey.  
-[https\://www\.medrxiv.org/content/10.64898/2026.08.09.26359590v1](https://www.medrxiv.org/content/10.64898/2026.08.09.26359590v1)
+	[https\://www\.medrxiv.org/content/10.64898/2026.08.09.26359590v1](https://www.medrxiv.org/content/10.64898/2026.08.09.26359590v1)
 
 Bauerfeind. HYROX injury | Common problems, causes & prevention.  
-[https\://www\.bauerfeind-sports.com/hyrox-injuries/](https://www.bauerfeind-sports.com/hyrox-injuries/)
+	[https\://www\.bauerfeind-sports.com/hyrox-injuries/](https://www.bauerfeind-sports.com/hyrox-injuries/)
 
 HYROX All Time Ranking Official Website  
 [https\://results.hyrox.com/season-8/?page=2695\&event=HPRO\_HYROXOVERALL\&pid=list\_overall\&pidp=ranking\_nav\&search%5Bsex%5D=M](https://results.hyrox.com/season-8/?page=2695&event=HPRO_HYROXOVERALL&pid=list_overall&pidp=ranking_nav&search%5Bsex%5D=M)
