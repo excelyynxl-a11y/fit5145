@@ -312,6 +312,8 @@ slowdown_summary <- analysis_data %>%
 slowdown_summary
 ```
 
+Histogram is used to show the distribution of slowdown percentage from early run mean (Runs 1-4) to later run mean (Runs 5-8). A slowdown percentage exceeding right of dashed line (0 %) means athletes slowed down in second half run.
+
 ```{R}
 ggplot(analysis_data, aes(x = Slowdown_Percentage, fill = Division)) +
   geom_histogram(binwidth = 1, alpha = 0.6, position = "identity", color = "white") +
@@ -324,6 +326,7 @@ ggplot(analysis_data, aes(x = Slowdown_Percentage, fill = Division)) +
     y = "Athletes",
     fill = "Division"
   ) +
+  facet_wrap(~ Division, nrow = 1) +
   theme_minimal(base_size = 12) +
   theme(
     panel.grid.minor = element_blank(),
@@ -549,12 +552,17 @@ cv_results <- bind_rows(
 cv_results
 ```
 
+Naive persistence baseline is created with predict later run mean equal to early run mean. This baseline is used to used as a comparison / baseline for a model. It provides a target to evaluate is a model improvement is significant, by how much, make error intepretable and set a target for future work. As simple as it is, it is important in answering:
+
+- Does early-run mean carry any predictive information about slowdown? Or
+
+- Would ignoring the question entirely work just as well?
+
 ```{R}
-# Naive persistence baseline: predict later run mean equal to early run mean
 persistence_baseline <- analysis_data %>%
   mutate(
-    Persistence_Pred = Early_Run_Mean,
-    Abs_Error = abs(Later_Run_Mean - Persistence_Pred),
+    Persistence_Pred = Early_Run_Mean, #  predict later run mean = early run mean
+    Abs_Error = abs(Later_Run_Mean - Persistence_Pred), # how wrong is the naive forecast
     Sq_Error = (Later_Run_Mean - Persistence_Pred)^2
   )
 
@@ -584,7 +592,11 @@ We observed:
 
 - Since adding more factors does not deliver a substantive improvement, the parsimony principle selects model 1 (early run mean only as predictor of later run mean). Model 1 can explain 70% of variation in later run time, with an average of 12.4s absolute differences between model predictions and athletes' actual later run mean values.
 
-Why do the functional stations add so little? Running carries most of the predictive signal, while the first-half stations measure distinct physical capacities that correlate only weakly with later-run pace (r = 0.10–0.27). The remaining \~30% of unexplained variation reflects factors absent from the data — individual fatigue resistance, venue and weather, penalty times embedded in splits, and age-group heterogeneity within the pro division.
+Running carries most of the race's predictive signal, while the first-half functional stations measure distinct physical capacities that correlate only weakly with later-run pace (r = 0.10–0.27). The remaining 30% of unexplained variation reflects factors absent from the data, namely individual fatigue resistance, venue and weather conditions, penalty times embedded in splits and age-group heterogeneity within the pro division.
+
+## Conclusion
+
+Model 1 (early run mean only as later run mean predictor) is chosen. To visualise its efficacy, predicted later run mean is plotted against actual later run mean with an identity reference line. The closer the points to the line, the more accurate the forecast.
 
 ```{R}
 fits$M1$pred %>%
@@ -607,6 +619,13 @@ fits$M1$pred %>%
   theme_minimal()
 ```
 
-### 
+```{R}
+analysis_data %>% group_by(Division) %>%
+  summarise(
+    Median_Later_Run = median(Later_Run_Mean)
+  )
+```
 
-## Conclusion
+The demonstration evidences the project's feasibility: a mid-race checkpoint forecast of later-run performance is achievable from elapsed splits alone, with an average error of 12.4 seconds — around 5% of the median later-run mean (241 seconds male, 278 seconds female) — using only data that race timing systems already publish. The main limitations are the 30% of variance unexplained by early splits, a small number of extreme slowdown outliers and generalisation beyond Season 8 pro fields remaining untested.
+
+## 
