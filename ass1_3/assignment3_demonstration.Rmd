@@ -1,6 +1,6 @@
 ---
 title: "assignment3_demonstration"
-output: pdf_document
+output: html_document
 date: "2026-08-26"
 author: Lim Excelyynx (34476245)
 ---
