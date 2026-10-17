@@ -22,7 +22,6 @@ These datasets has been published to excelyynxl-a11 GitHub repository (link: <ht
 library(tidyverse)
 library(lubridate)
 library(hms)
-library(randomForest)
 library(caret)
 library(grid)
 ```
@@ -498,7 +497,7 @@ All 4 models shows random scatter around horizontal axis with no distinct trends
 
 ### 
 
-## Model evalutation using cross-validation (10 folds)
+## Model evaluation using cross-validation (10 folds)
 
 ```{R}
 # Define each models linear formula
@@ -550,7 +549,7 @@ cv_results <- bind_rows(
 cv_results
 ```
 
-Naive persistence baseline is created with predict later run mean equal to early run mean. This baseline is used to used as a comparison / baseline for a model. It provides a target to evaluate is a model improvement is significant, by how much, make error intepretable and set a target for future work. As simple as it is, it is important in answering:
+Naive persistence baseline is created with predict later run mean equal to early run mean. This baseline is used to used as a comparison / baseline for a model. It provides a target to evaluate is a model improvement is significant, by how much, make error interpretable and set a target for future work. As simple as it is, it is important in answering:
 
 - Does early-run mean carry any predictive information about slowdown? Or
 
@@ -625,6 +624,6 @@ analysis_data %>% group_by(Division) %>%
 
 ## Conclusion
 
-The demonstration evidences the project's feasibility: a mid-race checkpoint forecast of later-run performance is achievable from elapsed splits alone, with an average error of 12.4 seconds — around 5% of the median later-run mean (241 seconds male, 278 seconds female) — using only data that race timing systems already publish. The main limitations are the 30% of variance unexplained by early splits, a small number of extreme slowdown outlier and generalization beyond Season 8 pro fields remaining untested.
+The demonstration evidences the project's feasibility: a mid-race checkpoint forecast of later-run performance is achievable from elapsed splits alone, with an average error of 12.4 seconds — around 5% of the median later-run mean (241 seconds male, 278 seconds female) — using only data that race timing systems already publish. The main limitations are the 30% of variance unexplained by early splits, a small number of extreme slowdown outliers and generalization beyond Season 8 pro fields remaining untested.
 
 ## 
