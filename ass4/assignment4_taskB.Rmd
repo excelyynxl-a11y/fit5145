@@ -1,0 +1,28 @@
+---
+title: "assignment4_taskB"
+output: html_document
+date: "2026-10-26"
+---
+
+# Task B: Exploratory Data Analysis Using R
+
+Load library
+
+```{R}
+
+```
+
+Load dataset
+
+```{R}
+
+```
+
+## 1. Identify the top 3 suburbs with the highest number of property transactions over the years, and plot their monthly transaction counts for the year 2022. Include Toorak in the plot as well, if it is not among the top 3 suburbs.
+
+## 2. What are the 3 most important keywords in the description column that impact property prices? (Note: Since the description column contains a large volume of text, please extract a 10% sample from the original dataset to answer this question.)
+
+## 3. Owning property has long been considered a reliable way to build personal wealth. Which properties have experienced the highest price increases since their first sale? Please exclude properties where the time between the first and last sale exceeds five years. List the top five properties along with their address, capital gain, and the duration between the first and last sale.
+
+## 4. Chris is looking for a renovated house to purchase. He wants the property to be close to a shopping centre, and since he has an 8-year-old son, proximity to a primary school is also important. He is looking for a home with 4 bedrooms and 2 bathrooms. Currently, he is considering six suburbs - Mulgrave, Vermont South, Doncaster East, Rowville, Glen Waverley, and Wheelers Hill and plans to choose one from this list. Please provide the predicted price for November 2026 of a house that meets the above criteria in each of the six suburbs, and display the predicted price alongside the corresponding suburb name. (Note: When you build the prediction model, please  use only the provided dataset and the period it covers.) 
+
