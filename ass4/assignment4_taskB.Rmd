@@ -215,7 +215,8 @@ ggplot(top_3_monthly_transaction_2022, aes(x = month, y = total_transaction, col
 
 ## 2. What are the 3 most important keywords in the description column that impact property prices? (Note: Since the description column contains a large volume of text, please extract a 10% sample from the original dataset to answer this question.)
 
-### Data cleaning 
+### Data cleaning
+
 Since the description column contains a large volume of text, we will extract 10% sample from the original dataset for this analysis.
 
 Observe price.
@@ -301,8 +302,77 @@ ptv_10_perc_sample <- ptv_price %>% slice_sample(prop = 0.10)
 ptv_10_perc_sample %>% select(id, price_num, price, description) %>% arrange(desc(price_num))
 ```
 
-### Pre-processing textual data 
+### Pre-processing textual data
 
+```{R}
+desc <- ptv_10_perc_sample %>%
+  mutate(
+    doc_id = row_number()
+  ) %>%
+  select(
+    doc_id,
+    text = description
+  )
+
+
+desc
+
+desc_source <- DataframeSource(desc)
+desc_corpus <- Corpus(desc_source)
+
+desc_corpus
+```
+
+Observe the first row in desc_corpus.
+
+```{R}
+inspect(desc_corpus[1:1])
+```
+
+Text removal using:
+
+1.  Case normalisation to lowercase: Ensures stop words can be matched consistently regardless of capitalization.
+2.  Remove stop words: Eliminate common words that don't carry much meaning.
+3.  Remove punctuation: Remove punctuations that don't contribute to the meaning of text.
+4.  Remove numbers: Numerical digits do not contribute much to the meaning of text
+5.  Strip whitespaces: For consistency.
+
+```{R}
+desc_corpus <- tm_map(desc_corpus, content_transformer(tolower))
+
+desc_corpus <- tm_map(desc_corpus, removeWords, stopwords("english")) 
+
+desc_corpus <- tm_map(desc_corpus, removePunctuation)
+
+desc_corpus <- tm_map(desc_corpus, removeNumbers)
+
+desc_corpus <- tm_map(desc_corpus, stripWhitespace)
+
+```
+
+Observe the first row in desc_corpus after text removal.
+
+```{R}
+inspect(desc_corpus[1:1])
+```
+
+Lemmatisation
+
+```{R}
+# define helper function to lemmatise text
+lemmatize_text <- function(text) {
+  lemmatised <- lemmatize_strings(text)
+  return (lemmatised)
+}
+
+desc_lemma <- tm_map(desc_corpus, content_transformer(lemmatize_text))
+```
+
+Inspect the first row in desc_lemma after lemmatisation.
+
+```{R}
+inspect(desc_lemma[1:1])
+```
 
 ## 3. Owning property has long been considered a reliable way to build personal wealth. Which properties have experienced the highest price increases since their first sale? Please exclude properties where the time between the first and last sale exceeds five years. List the top five properties along with their address, capital gain, and the duration between the first and last sale.
 
