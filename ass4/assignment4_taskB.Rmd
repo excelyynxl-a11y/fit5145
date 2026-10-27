@@ -17,19 +17,21 @@ library(textstem)
 library(wordcloud2)
 ```
 
-Load dataset
+Load dataset.
 
 ```{R}
 ptv <- read_csv("data/property_transaction_victoria.csv")
 ```
 
-Observe raw dataset
+Observe raw dataset.
 
 ```{R}
 glimpse(ptv)
 ```
 
 ## 1. Identify the top 3 suburbs with the highest number of property transactions over the years, and plot their monthly transaction counts for the year 2022. Include Toorak in the plot as well, if it is not among the top 3 suburbs.
+
+Check how many row contains NA cases.
 
 ```{R}
 ptv %>% 
@@ -38,9 +40,15 @@ ptv %>%
   )
 ```
 
+Since a all 418390 rows contains NA fields, we will clean them as we work through each section based on the context of task requirements.
+
+(SHOULD WE CONSIDER ONLY VICTORIA ?????)
+
 ```{R}
 ptv %>% count(state) 
 ```
+
+Observe cases with NA state.
 
 ```{R}
 ptv %>% filter(
@@ -48,15 +56,17 @@ ptv %>% filter(
 )
 ```
 
-```{R}
-ptv %>% filter(
-  is.na(suburb)
-)
-```
+We observe all 21 cases with NA state are empty meaning less cases. We will simply drop of these cases later.
+
+Observe cases with NA suburb.
 
 ```{R}
-ptv %>% count(suburb) 
+ptv %>% filter(is.na(suburb))
 ```
+
+We observe all 21 cases with NA suburb are empty meaningless cases, which are the same as before.
+
+Observe any NA date or out of range date (we are only interested in 2010-2023).
 
 ```{R}
 ptv %>% 
@@ -69,15 +79,40 @@ ptv %>%
   arrange(sold_date)
 ```
 
+We observe 5218 cases contain NA sold date.
+
+Observe if other fields hints us on how to impute the NA sold_date.
+
+```{R}
+ptv %>% 
+  filter(
+    is.na(ymd(sold_date))
+  )
+```
+
+Since no other fields allow us to impute sold date, we will drop off all cases with NA sold date.
+
 ```{R}
 ptv_cleaned <- ptv %>%
   filter(
-    state == "Vic" |
+    # remove the 21 meaningless NA rows
+    !if_all(everything(), is.na),
+    # Vic only
+    state == "Vic",
+    # remove NA sold_date
     !is.na(ymd(sold_date))
   )
 
 ptv_cleaned
+
+ptv_cleaned %>% 
+  filter(
+    is.na(ymd(sold_date))
+  ) %>%
+  select(id, sold_date)
 ```
+
+Group ptv_cleaned by suburb and get the total transaction of each suburb over the years (2010-2023)
 
 ```{R}
 ptv_cleaned %>%
@@ -89,6 +124,14 @@ ptv_cleaned %>%
   ) %>%
   arrange(desc(total_transaction_suburb))
 ```
+
+The top 3 suburb with highest number of property transaction over the years are:
+
+1.  Toorak
+2.  Melbourne
+3.  Clyde North
+
+We will save the 3 suburb names into a top_3_suburb table.
 
 ```{R}
 top_3_suburb <- ptv_cleaned %>%
@@ -104,6 +147,8 @@ top_3_suburb <- ptv_cleaned %>%
 
 top_3_suburb
 ```
+
+To get the monthly transaction counts for year 2022 of these 3 suburb, we semi-join the top_3_suburb table with ptv_cleaned by suburb field. Then extract the year and month from sold_date field. Filter only rows from year 2022 and calculate the sum of transaction per month by grouping suburb and month.
 
 ```{R}
 # monthly transaction counts for the year 2022
@@ -131,6 +176,14 @@ top_3_monthly_transaction_2022 <- ptv_cleaned %>%
 
 top_3_monthly_transaction_2022
 ```
+
+We observe:
+
+1.  Clyde North has 12 months.
+2.  Melbourne has 12 months.
+3.  Toorak has only 11 months. (WHAT TO DOOOOO)
+
+We use a line chart to plot monthly transaction counts for the year 2022, with each suburb differentiated by the line color. A line chart is used because transaction count over time is continuous data, where the slope of the line viisualises trends, patterns and rate of change throughout 2022. Colored lines allows direct comparison of month-to-month trajectories across the 3 suburbs on a single plot.
 
 ```{R}
 ggplot(top_3_monthly_transaction_2022, aes(x = month, y = total_transaction, color = suburb)) + 
