@@ -314,8 +314,7 @@ desc <- ptv_10_perc_sample %>%
     text = description
   )
 
-
-desc
+desc <- as.data.frame(desc)
 
 desc_source <- DataframeSource(desc)
 desc_corpus <- Corpus(desc_source)
@@ -331,11 +330,11 @@ inspect(desc_corpus[1:1])
 
 Text removal using:
 
-1.  Case normalisation to lowercase: Ensures stop words can be matched consistently regardless of capitalization.
+1.  Case normalization to lowercase: Ensures stop words can be matched consistently regardless of capitalization.
 2.  Remove stop words: Eliminate common words that don't carry much meaning.
-3.  Remove punctuation: Remove punctuations that don't contribute to the meaning of text.
+3.  Remove punctuation: Remove punctuation that don't contribute to the meaning of text.
 4.  Remove numbers: Numerical digits do not contribute much to the meaning of text
-5.  Strip whitespaces: For consistency.
+5.  Strip whitespace: For consistency.
 
 ```{R}
 desc_corpus <- tm_map(desc_corpus, content_transformer(tolower))
@@ -356,7 +355,7 @@ Observe the first row in desc_corpus after text removal.
 inspect(desc_corpus[1:1])
 ```
 
-Lemmatisation
+We will reduce words to their base forms to reduce sparsity and improve the efficiency and accuracy of text analysis in description column. Lemmatisation technique is used because we want the output to be a valid word (unlike stemming technique that may return partial/prefixes/suffix of an original word).
 
 ```{R}
 # define helper function to lemmatise text
@@ -371,7 +370,67 @@ desc_lemma <- tm_map(desc_corpus, content_transformer(lemmatize_text))
 Inspect the first row in desc_lemma after lemmatisation.
 
 ```{R}
-inspect(desc_lemma[1:1])
+inspect(desc_lemma[1])
+```
+
+Verify if all the 10% descriptions exist in desc_lemma.
+
+```{R}
+length(desc_lemma)
+```
+
+### Feature extraction
+
+After text pre-processing, we will represent the pre-processed words as numerical expression.
+
+We will build a Document Term Matrix called desc_dtm to observe the sparsity
+
+```{R}
+desc_dtm <- DocumentTermMatrix(desc_lemma)
+
+inspect(desc_dtm)
+```
+
+We observed:
+
+- Sparsity = 100%, indicating 100% of values in matrix is zero. However, this is due to rounding up as calculated from (3110421323 - 3712687)/3110421323 \* 100% = 99.88%.
+
+Remove sparse term from desc_dtm. Sparse value (= x) used means if term appears less than (x \* 100%) in all documents, we remove it. We try 3 different sparse values: 0.99, 0.98, 0.95
+
+```{R}
+desc_dtm_spar_099 <- removeSparseTerms(desc_dtm, 0.99)
+
+inspect(desc_dtm_spar_099)
+```
+
+```{R}
+desc_dtm_spar_098 <- removeSparseTerms(desc_dtm, 0.98)
+
+inspect(desc_dtm_spar_098)
+```
+
+```{R}
+desc_dtm_spar_095 <- removeSparseTerms(desc_dtm, 0.95)
+
+inspect(desc_dtm_spar_095)
+```
+
+```{R}
+term_freq <- as.data.frame(as.matrix(desc_dtm_spar_095) > 0) * 1
+
+term_freq
+```
+
+```{R}
+
+```
+
+```{R}
+
+```
+
+```{R}
+
 ```
 
 ## 3. Owning property has long been considered a reliable way to build personal wealth. Which properties have experienced the highest price increases since their first sale? Please exclude properties where the time between the first and last sale exceeds five years. List the top five properties along with their address, capital gain, and the duration between the first and last sale.
