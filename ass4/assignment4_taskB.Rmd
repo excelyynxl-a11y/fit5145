@@ -66,6 +66,14 @@ ptv %>% filter(is.na(suburb))
 
 We observe all 21 cases with NA suburb are empty meaningless cases, which are the same as before.
 
+Observe badge to check if we can filter by sold records.
+
+```{R}
+ptv %>% count(badge)
+```
+
+We observe all 21 cases with NA badge are empty meaningless cases, which are the same as before. The remaining are labelled "Sold".
+
 Observe any NA date or out of range date (we are only interested in 2010-2023).
 
 ```{R}
@@ -128,7 +136,9 @@ ptv_cleaned %>%
 The top 3 suburb with highest number of property transaction over the years are:
 
 1.  Toorak
+
 2.  Melbourne
+
 3.  Clyde North
 
 We will save the 3 suburb names into a top_3_suburb table.
@@ -202,6 +212,91 @@ ggplot(top_3_monthly_transaction_2022, aes(x = month, y = total_transaction, col
 ```
 
 ## 2. What are the 3 most important keywords in the description column that impact property prices? (Note: Since the description column contains a large volume of text, please extract a 10% sample from the original dataset to answer this question.)
+
+Since the description column contains a large volume of text, we will extract 10% sample from the original dataset for this analysis.
+
+Observe price.
+
+```{R}
+ptv_cleaned %>% count(price) %>% arrange(desc(price))
+```
+
+We observe price has inconsistent categorisation, for example:
+
+1.  Range: \$XXXXXX- \$YYYYYY; that overlaps
+2.  Contact agent
+3.  \$ZZZZZZ
+
+To standardize the price, we will convert all price to numeric value instead of range-base because:
+
+1.  Range-based field disregards information such as the difference between \$980,000 - \$1,140,000.
+2.  Goal is to measure how keywords relate to price, which works best with a continuous price.
+
+We will create a new price_num column where the original price will be parse as such:
+
+1.  Raw value with "Contact agent" will result in NA after parsing, which will then be dropped off since there is no price signal.
+
+2.  Raw value of "\$ZZZ,ZZZ" is parsed to numerical ZZZZZZ
+
+3.  Raw value of "Range: \$XXXXXX- \$YYYYYY" is parse to obtain the midpoint value.
+
+Observe description.
+
+```{R}
+ptv_cleaned %>% head(10) %>% select(description)
+```
+
+We observe description fields are textual data.
+
+Observe any NA description.
+
+```{R}
+empty_desc <- ptv_cleaned %>% filter(is.na(description))
+```
+
+We will drop cases with NA description since no informational keywords-price relationship can be obtained if the description is NA itself.
+
+Compiling all the observation from price and description column, we create the new ptv_price table.
+
+```{R}
+# helper function to parse range-based price into numerical price
+parse_price <- function(x) {
+  # extract numerical value from string (eg: $XXX,XXX into XXXXXX)
+  nums <- str_extract_all(x, "[0-9]{1,3}(,[0-9]{3})+|[0-9]{5,}")
+  
+  # get the midpoint from range-based price
+  map_dbl(nums, ~ if (length(.x) == 0) NA_real_
+                else mean(as.numeric(str_remove_all(.x, ",")))) 
+}
+
+ptv_price <- ptv_cleaned %>%
+  mutate(
+    # parse price into numerical
+    price_num = parse_price(price)
+  ) %>%
+  filter(
+    # exclude NA description
+    !is.na(description),
+    # exclude invalid negative price 
+    price_num > 0,
+    # exclude NA price_num 
+    # (eg: price that are originally have no price signal like "Contact agent")
+    !is.na(price_num)
+  )
+
+ptv_price %>% select(id, price_num, price, description) %>% arrange(desc(price_num))
+```
+
+Extract the 10% from ptv_price table.
+
+```{R}
+# use seed for reproducibility
+set.seed(5145)
+
+ptv_10_perc_sample <- ptv_price %>% slice_sample(prop = 0.10)
+
+ptv_10_perc_sample
+```
 
 ## 3. Owning property has long been considered a reliable way to build personal wealth. Which properties have experienced the highest price increases since their first sale? Please exclude properties where the time between the first and last sale exceeds five years. List the top five properties along with their address, capital gain, and the duration between the first and last sale.
 
