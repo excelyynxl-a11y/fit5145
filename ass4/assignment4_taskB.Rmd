@@ -416,17 +416,80 @@ inspect(desc_dtm_spar_095)
 ```
 
 ```{R}
-term_freq <- as.data.frame(as.matrix(desc_dtm_spar_095) > 0) * 1
+# get count > 0 and multiple by 1 to obtain a TRUE = 1 and FALSE = 0
+# 1 indicate the term is mentioned, 0 indicate the term is not mention in docs/description
+term_appearance <- as.data.frame(as.matrix(desc_dtm_spar_095) > 0) * 1
 
-term_freq
+term_appearance %>% head()
+```
+
+To prevent clashes of term with actual column name in dataset, we add a prefix (term\_) to all terms. Before that, we will check if any term are invalid (non-alphabetical) meaningless terms.
+
+```{R}
+colnames(desc_dtm_spar_095)[grepl("^[^a-z]", colnames(desc_dtm_spar_095))]
 ```
 
 ```{R}
-
+term_appearance %>% select("’", "•")
 ```
 
-```{R}
+We observe 2 columns has name "’" "•". These columns must be removed to prevent make.names() from creating duplicated column name that prevents table joining.
 
+```{R}
+term_appearance <- term_appearance %>% 
+  select(-c("’", "•"))
+```
+
+Now, add prefix (term\_) to column names.
+
+```{R}
+names(term_appearance) <- paste0("term_", make.names(colnames(term_appearance)))
+
+# verify all column names are prefixed with "term_"
+term_appearance %>% head()
+```
+
+Join desc, term_appearance and ptv_10_perc_sample tables by doc_id into data frame called desc_df.
+
+```{R}
+# add doc_id (chr) to ptv_10_perc_sample needed for joining 
+ptv_10_perc_sample <- ptv_10_perc_sample %>%
+  mutate(
+    doc_id = as.character(row_number())
+  )
+
+# add doc_id (chr) to term_appearance needed for joining 
+term_appearance$doc_id <- rownames(term_appearance)
+
+# convert doc_id to (chr) format
+desc <- desc %>% mutate(
+  doc_id = as.character(doc_id)
+)
+
+# chr
+ptv_10_perc_sample %>% select(doc_id)
+# chr
+desc %>% select(doc_id)
+# chr
+term_appearance %>% select(doc_id)
+
+
+# join desc, term_appearance and ptv_10_perc_sample tables by their common doc_id
+desc_df <- desc %>%
+  select(doc_id) %>%
+  inner_join(
+    ptv_10_perc_sample %>% select(
+      doc_id,
+      price_num
+    ),
+    by = "doc_id"
+  ) %>%
+  inner_join(
+    term_appearance,
+    by = "doc_id"
+  )
+
+desc_df 
 ```
 
 ```{R}
