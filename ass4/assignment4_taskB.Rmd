@@ -416,7 +416,7 @@ desc_dtm_spar_070 <- removeSparseTerms(desc_dtm, 0.70)
 inspect(desc_dtm_spar_070)
 ```
 
-DEYYYYYY WHICH VALUE TO USEEEEEE ?????????????????????
+Sparsity value of 0.90, 0.8 and 0.7 were compared, retaining 221, 89 and 43 term respectively. Sparsity value = 0.7 was chosen because HELP MEEEE IDKKKKK HOWWWW DOOOOOOOOO URGHHHHH?????
 
 ```{R}
 # get count > 0 and multiple by 1 to obtain a TRUE = 1 and FALSE = 0
@@ -549,5 +549,9 @@ This means these 3 keywords impact property price by 16.4%, 14.8% and 14.5% resp
 Therefore, the 3 most important keywords in the description column that impact property prices are "dine", "garden" and "family".
 
 ## 3. Owning property has long been considered a reliable way to build personal wealth. Which properties have experienced the highest price increases since their first sale? Please exclude properties where the time between the first and last sale exceeds five years. List the top five properties along with their address, capital gain, and the duration between the first and last sale.
+
+```{R}
+ptv_price %>% head()
+```
 
 ## 4. Chris is looking for a renovated house to purchase. He wants the property to be close to a shopping centre, and since he has an 8-year-old son, proximity to a primary school is also important. He is looking for a home with 4 bedrooms and 2 bathrooms. Currently, he is considering six suburbs - Mulgrave, Vermont South, Doncaster East, Rowville, Glen Waverley, and Wheelers Hill and plans to choose one from this list. Please provide the predicted price for November 2026 of a house that meets the above criteria in each of the six suburbs, and display the predicted price alongside the corresponding suburb name. (Note: When you build the prediction model, please use only the provided dataset and the period it covers.)
