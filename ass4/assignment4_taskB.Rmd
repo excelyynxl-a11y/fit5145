@@ -396,7 +396,7 @@ We observed:
 
 - Sparsity = 100%, indicating 100% of values in matrix is zero. However, this is due to rounding up as calculated from (3110421323 - 3712687)/3110421323 \* 100% = 99.88%.
 
-Remove sparse term from desc_dtm. Sparse value (= x) used means if term appears less than (x \* 100%) in all documents, we remove it. We try 3 different sparse values: 0.90, 0.8 and 0.7
+Next, we will remove sparse term from desc_dtm. Sparse value (= x) used means if term appears less than (x \* 100%) in all documents, we remove it. We try 3 different sparse values: 0.90, 0.8 and 0.7
 
 ```{R}
 desc_dtm_spar_090 <- removeSparseTerms(desc_dtm, 0.90)
@@ -416,6 +416,8 @@ desc_dtm_spar_070 <- removeSparseTerms(desc_dtm, 0.70)
 inspect(desc_dtm_spar_070)
 ```
 
+DEYYYYYY WHICH VALUE TO USEEEEEE ?????????????????????
+
 ```{R}
 # get count > 0 and multiple by 1 to obtain a TRUE = 1 and FALSE = 0
 # 1 indicate the term is mentioned, 0 indicate the term is not mention in docs/description
@@ -432,6 +434,8 @@ names(term_appearance) <- paste0("term_", make.names(colnames(term_appearance)))
 # verify all column names are prefixed with "term_"
 term_appearance %>% head()
 ```
+
+### Log transformation on price_num
 
 Before joining tables, we will observe the distribution of price_num to determine any transformation (eg: log transformation) is required. We will plot a histogram to visualise the distribution and compare it to a log version.
 
@@ -463,6 +467,8 @@ ptv_10_perc_sample %>%
 
 From the 2 histogram plots above, we observed that raw price_num is right-skewed whereas after a log transformation, the distribution of log(price_num) is less skewed. This indicates that we will analyse keywords correlation against the log(price_num) rather than raw price_num because linear regression assumes symmetric and constant-variance residuals. A heavily right-skewed target lets extreme values the fit. The log transform reduces the influence of these extreme values and lets each keyword’s coefficient be read as an approximate percentage change in price rather than a fixed amount.
 
+### Joining tables by doc_id
+
 Join desc, term_appearance and ptv_10_perc_sample tables by doc_id into data frame called desc_df.
 
 ```{R}
@@ -480,14 +486,6 @@ desc <- desc %>% mutate(
   doc_id = as.character(doc_id)
 )
 
-# chr
-ptv_10_perc_sample %>% select(doc_id)
-# chr
-desc %>% select(doc_id)
-# chr
-term_appearance %>% select(doc_id)
-
-
 # join desc, term_appearance and ptv_10_perc_sample tables by their common doc_id
 desc_df <- desc %>%
   select(doc_id) %>%
@@ -498,6 +496,7 @@ desc_df <- desc %>%
         price_num
       ) %>%
       mutate(
+        # convert price_num to log_price
         log_price = log(price_num)  
       ),
     by = "doc_id"
@@ -511,14 +510,17 @@ desc_df <- desc %>%
     -price_num
   )
 
-desc_df 
+desc_df %>% head() 
 ```
+
+To analyse the correlation between each keyword and price (compared against log_price), we produce a linear regression to observe the estimate (β); the higher the β, the stronger the correlation between the particular keyword and price.
 
 ```{R}
 lm_fit <- lm(log_price ~ ., data = desc_df)
 
 tidy(lm_fit) %>% 
   mutate(
+    # price_effect = exp(β)-1 since log_price is log(price_num)
     price_effect = exp(estimate) - 1
   ) %>%
   select(
