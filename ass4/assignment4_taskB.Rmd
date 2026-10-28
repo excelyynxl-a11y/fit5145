@@ -15,6 +15,7 @@ library(tm)
 library(tokenizers)
 library(textstem)
 library(wordcloud2)
+library(broom)
 ```
 
 Load dataset.
@@ -395,52 +396,35 @@ We observed:
 
 - Sparsity = 100%, indicating 100% of values in matrix is zero. However, this is due to rounding up as calculated from (3110421323 - 3712687)/3110421323 \* 100% = 99.88%.
 
-Remove sparse term from desc_dtm. Sparse value (= x) used means if term appears less than (x \* 100%) in all documents, we remove it. We try 3 different sparse values: 0.99, 0.98, 0.95
+Remove sparse term from desc_dtm. Sparse value (= x) used means if term appears less than (x \* 100%) in all documents, we remove it. We try 3 different sparse values: 0.90, 0.8 and 0.7
 
 ```{R}
-desc_dtm_spar_099 <- removeSparseTerms(desc_dtm, 0.99)
+desc_dtm_spar_090 <- removeSparseTerms(desc_dtm, 0.90)
 
-inspect(desc_dtm_spar_099)
+inspect(desc_dtm_spar_090)
 ```
 
 ```{R}
-desc_dtm_spar_098 <- removeSparseTerms(desc_dtm, 0.98)
+desc_dtm_spar_080 <- removeSparseTerms(desc_dtm, 0.80)
 
-inspect(desc_dtm_spar_098)
+inspect(desc_dtm_spar_080)
 ```
 
 ```{R}
-desc_dtm_spar_095 <- removeSparseTerms(desc_dtm, 0.95)
+desc_dtm_spar_070 <- removeSparseTerms(desc_dtm, 0.70)
 
-inspect(desc_dtm_spar_095)
+inspect(desc_dtm_spar_070)
 ```
 
 ```{R}
 # get count > 0 and multiple by 1 to obtain a TRUE = 1 and FALSE = 0
 # 1 indicate the term is mentioned, 0 indicate the term is not mention in docs/description
-term_appearance <- as.data.frame(as.matrix(desc_dtm_spar_095) > 0) * 1
+term_appearance <- as.data.frame(as.matrix(desc_dtm_spar_070) > 0) * 1
 
 term_appearance %>% head()
 ```
 
-To prevent clashes of term with actual column name in dataset, we add a prefix (term\_) to all terms. Before that, we will check if any term are invalid (non-alphabetical) meaningless terms.
-
-```{R}
-colnames(desc_dtm_spar_095)[grepl("^[^a-z]", colnames(desc_dtm_spar_095))]
-```
-
-```{R}
-term_appearance %>% select("’", "•")
-```
-
-We observe 2 columns has name "’" "•". These columns must be removed to prevent make.names() from creating duplicated column name that prevents table joining.
-
-```{R}
-term_appearance <- term_appearance %>% 
-  select(-c("’", "•"))
-```
-
-Now, add prefix (term\_) to column names.
+To prevent clashes of term with actual column name in dataset, we add a prefix (term\_) to all terms column name.
 
 ```{R}
 names(term_appearance) <- paste0("term_", make.names(colnames(term_appearance)))
@@ -448,6 +432,36 @@ names(term_appearance) <- paste0("term_", make.names(colnames(term_appearance)))
 # verify all column names are prefixed with "term_"
 term_appearance %>% head()
 ```
+
+Before joining tables, we will observe the distribution of price_num to determine any transformation (eg: log transformation) is required. We will plot a histogram to visualise the distribution and compare it to a log version.
+
+```{R}
+ptv_10_perc_sample %>%
+  ggplot(aes(price_num)) +
+  geom_histogram(bins = 600) +
+  coord_cartesian(xlim = c(-1e6, 5e6)) +
+  scale_x_continuous(labels = scales::label_comma()) +
+  labs(
+    title = "Distribution of price_num",
+    x = "Price (AUD)",
+    y = "Count"
+  )
+```
+
+```{R}
+ptv_10_perc_sample %>%
+  ggplot(aes(log(price_num))) +
+  geom_histogram(bins = 60) +
+  coord_cartesian(xlim = c(10, 18)) +
+  scale_x_continuous(labels = scales::label_comma()) +
+  labs(
+    title = "Distribution of log(price_num)",
+    x = "Price (AUD)",
+    y = "Count"
+  )
+```
+
+From the 2 histogram plots above, we observed that raw price_num is right-skewed whereas after a log transformation, the distribution of log(price_num) is less skewed. This indicates that we will analyse keywords correlation against the log(price_num) rather than raw price_num because linear regression assumes symmetric and constant-variance residuals. A heavily right-skewed target lets extreme values the fit. The log transform reduces the influence of these extreme values and lets each keyword’s coefficient be read as an approximate percentage change in price rather than a fixed amount.
 
 Join desc, term_appearance and ptv_10_perc_sample tables by doc_id into data frame called desc_df.
 
@@ -478,24 +492,59 @@ term_appearance %>% select(doc_id)
 desc_df <- desc %>%
   select(doc_id) %>%
   inner_join(
-    ptv_10_perc_sample %>% select(
-      doc_id,
-      price_num
-    ),
+    ptv_10_perc_sample %>% 
+      select(
+        doc_id,
+        price_num
+      ) %>%
+      mutate(
+        log_price = log(price_num)  
+      ),
     by = "doc_id"
   ) %>%
   inner_join(
     term_appearance,
     by = "doc_id"
+  ) %>%
+  select(
+    -doc_id,
+    -price_num
   )
 
 desc_df 
 ```
 
 ```{R}
-fit <- lm(price_num ~ ., data = desc_df)
-fit
+lm_fit <- lm(log_price ~ ., data = desc_df)
+
+tidy(lm_fit) %>% 
+  mutate(
+    price_effect = exp(estimate) - 1
+  ) %>%
+  select(
+    term,
+    estimate,
+    price_effect,
+    p.value
+  ) %>%
+  arrange(desc(estimate))
 ```
+
+From the linear regression of log(price_num) on keyword indicator identified top 3 keyword with largest postiive association with price, with estimate (β):
+
+1.  "dine" (β = 0.151)
+2.  "garden" (β = 0.138)
+3.  "family" (β = 0.135)
+
+Since we are comparing log(price_num), we will convert the coefficient (β) with price_effect = exp(β)-1:
+
+1.  "dine" (price_effect = 0.164)
+2.  "garden" (price_effect = 0.148)
+3.  "family" (price_effect = 0.145)
+
+This means these 3 keywords impact property price by 16.4%, 14.8% and 14.5% respectively.
+
+Therefore, the 3 most important keywords in the description column that impact property prices are "dine", "garden" and "family".
 
 ## 3. Owning property has long been considered a reliable way to build personal wealth. Which properties have experienced the highest price increases since their first sale? Please exclude properties where the time between the first and last sale exceeds five years. List the top five properties along with their address, capital gain, and the duration between the first and last sale.
 
