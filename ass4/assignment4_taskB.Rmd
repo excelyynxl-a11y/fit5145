@@ -493,7 +493,8 @@ desc_df
 ```
 
 ```{R}
-
+fit <- lm(price_num ~ ., data = desc_df)
+fit
 ```
 
 ## 3. Owning property has long been considered a reliable way to build personal wealth. Which properties have experienced the highest price increases since their first sale? Please exclude properties where the time between the first and last sale exceeds five years. List the top five properties along with their address, capital gain, and the duration between the first and last sale.
