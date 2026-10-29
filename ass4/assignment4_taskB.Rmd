@@ -578,71 +578,160 @@ ptv_price %>%
 
 Similarly, 3476 of NA short address.
 
-Without full address and short address, we cannot determine the particular property. Although we may have suburb, state and postcode, but a single \<suburb\>\<state\>\<postcode\> may have several properties present in it. We do not have other values to impute the missing full address and short address. Hence, the 3476 cases with missing full address and short address will be dropped.
+Without full address and short address, we cannot determine the particular property. Although we may have suburb, state and postcode, but a single \<suburb\>\<state\>\<postcode\> may have several properties present in it. We do not have other values to impute the missing full address and short address. Hence, the 3476 cases with missing full address and short address will be dropped. Cases with NA sold_date and and price_num are also dropped as no other fields contains value to impute those missing values.
 
-We create a new table of ptv_address that filters out NA full address and NA short address. Then, group by full_address and count each property sales throughout the years, recording its first and last sold year, first and last sold price.
+We create a new table of ptv_sold_summary that:
+
+- Filters out NA full address, short address, sold_date and price_num.
+
+- Group by full_address and count each property sales throughout the years
+
+- Record first and last sold year, first and last sold price.
 
 ```{R}
-ptv_address <- ptv_price %>%
-  # drop cases with NA full_address and short_address
+ptv_sold_summary <- ptv_price %>%
   filter(
+    # drop cases with NA full_address and short_address
     !is.na(full_address),
-    !is.na(short_address)
+    !is.na(short_address),
+    # drop cases with NA sold_date and price_num
+    !is.na(sold_date),
+    !is.na(price_num)
   ) %>% 
   group_by(
     full_address
   ) %>%
-  mutate(
+  summarise(
     n_sales = n(),
     first_date = min(sold_date),
-    last_last = max(sold_date),
+    last_date = max(sold_date),
     first_year = year(first_date),
     last_year = year(last_date),
     first_price = price_num[which.min(sold_date)],
     last_price = price_num[which.max(sold_date)],
     .groups = "drop"
   ) %>%
-  filter(n_sales >= 2) %>%
   arrange(desc(n_sales))
 
-ptv_address %>% select(full_address, short_address, n_sales)
+ptv_sold_summary
 ```
 
-```{R}
-ptv_address %>% 
-  arrange(
-    suburb, 
-    postcode, 
-    street_name, 
-    street_number, 
-    unit
-  ) %>% 
-  select(
-    short_address,
-    unit,
-    street_number, 
-    street_name, 
-    sold_date
-  )
-```
+Next, we create valid_sold table:
+
+- Property n_sales at least twice .
+
+- Compute capital_gain = last_price - first_price
+
+- Compute duration_year = last_date - first_date
+
+- duration_year is within 5 years.
 
 ```{R}
-ptv_address %>%
-  count(
-    full_address,
-    name = "n_sales"
+valid_sold <- ptv_sold_summary %>%
+  mutate(
+    capital_gain = last_price - first_price,
+    duration_year = as.numeric(last_date - first_date) / 365.25,
+    gap = as.period(interval(first_date, last_date), unit = "days"),
+    gap = as.period(interval(first_date, last_date)),
+    duration = paste0(gap@year, "y ", gap@month, "m ", gap@day, "d")
   ) %>%
-  filter(n_sales >= 2) %>%
-  arrange(desc(n_sales))
-
-ptv_address %>% 
   filter(
-    full_address == "132-134 Maroondah Highway, Mooroolbark, Vic 3138"
+    n_sales >= 2,
+    duration_year <= 5
   ) %>%
   select(
-    full_address,
-    short_address
+    -gap,
+    -duration_year
   )
+
+valid_sold %>% arrange(desc(capital_gain))
 ```
+
+Extract the top 5 properties that experienced the highest price increases since their first sale.
+
+```{R}
+top_5_ptv <- valid_sold %>%
+  arrange(desc(capital_gain)) %>%
+  select(
+    full_address,
+    capital_gain,
+    duration
+  ) %>%
+  head(5) 
+
+top_5_ptv
+```
+
+From top_5_ptv, the top 5 properties that experienced the highest price increases since their first sale are:
+
+1.  4385 South Gippsland Highway, Caldermeade, Vic 3984; capital gain = 4290467295 AUD; duration = 10 months.
+2.  18 Keiller Avenue, Parkdale, Vic 3195; capital gain = 1009368000 AUD; duration = 3 years 7 months 3 days
+3.  27/1 Millar Road, Tullamarine, Vic 3043; capital gain = 319735000 AUD; duration = 3 years 8 months 4 days
+4.  9 Whernside Avenue, Toorak, Vic 3142; capital gain = 11000000 AUD; duration = 4 years 4 months 5 days
+5.  33 Grandview Grove, Prahran, Vic 3181; capital gain = 6680000 AUD; duration = 4 years 28 days
 
 ## 4. Chris is looking for a renovated house to purchase. He wants the property to be close to a shopping centre, and since he has an 8-year-old son, proximity to a primary school is also important. He is looking for a home with 4 bedrooms and 2 bathrooms. Currently, he is considering six suburbs - Mulgrave, Vermont South, Doncaster East, Rowville, Glen Waverley, and Wheelers Hill and plans to choose one from this list. Please provide the predicted price for November 2026 of a house that meets the above criteria in each of the six suburbs, and display the predicted price alongside the corresponding suburb name. (Note: When you build the prediction model, please use only the provided dataset and the period it covers.)
+
+We continue using the ptv_price table created earlier with a price_num column with values of numerical value extracted from price column, midpoint from range-based price, descriptive-based price (eg: Contact agent) and NA excluded.
+
+Create a potential_property table that contain property that meets Chris's criteria of:
+
+- Property type is a house
+
+- 4 bedrooms
+
+- 2 bathrooms
+
+- Located in suburbs: Mulgrave, Vermont South, Doncaster East, Rowville, Glen Waverley, Wheelers Hill
+
+- Close to shopping center and primary school, determine from the appearance of "shopping center/centre/mall" and "primary school" keyword from description column,
+
+```{R}
+
+potential_property <- ptv_price %>%
+  filter(
+    property_type == "house",
+    bedrooms == 4,
+    bathrooms == 2,
+    suburb %in% c("Mulgrave", "Vermont South", "Doncaster East", "Rowville", "Glen Waverley", "Wheelers Hill"),
+    str_detect(
+      description,
+      regex("shopping\\s*(center|centre|mall)", ignore_case = TRUE)
+    ),
+    str_detect(
+      description,
+      regex("primary\\s*school", ignore_case = TRUE)
+    )
+  ) 
+
+potential_property %>% 
+  select(sold_date, price_num, property_type, bedrooms, bathrooms, suburb, description, price_num) %>% 
+  arrange(suburb, sold_date)
+```
+
+```{R}
+potential_property %>%
+  ggplot(aes(price_num)) +
+  geom_histogram(bins = 20) +
+  coord_cartesian(xlim = c(0, 3e6)) +
+  scale_x_continuous(labels = scales::label_comma()) +
+  facet_wrap(~ suburb, scales = "free_y") +
+  labs(
+    title = "Distribution of price_num",
+    x = "Price (AUD)",
+    y = "Count"
+  )
+```
+
+```{R}
+ggplot(potential_property, aes(x = sold_date, y = price_num)) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(method = "lm", se = FALSE, colour = "red") +
+  facet_wrap(~ suburb, scales = "free_y") +
+  labs(
+    title = "Sold price over time by suburb",
+    x = "Sold date", 
+    y = "Price (AUD)"
+  ) +
+  theme_minimal()
+```
