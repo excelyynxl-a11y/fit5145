@@ -3,42 +3,45 @@ title: "assignment4_taskC"
 output: pdf_document
 date: "2026-10-29"
 ---
+
 # Task B: Exploratory Data Analysis Using R
 
 Load library
-```{R}
 
+```{R}
+library(tidyverse)
+library(lubridate)
+library(tm)
+library(tokenizers)
+library(textstem)
+library(wordcloud2)
+library(broom)
 ```
 
 Load dataset
-```{R}
 
+```{R}
+# ind: Unique_ID, variables (word and their word count), unit_faculty, demographic_sex
+# dep: Unique_ID, label (relevant, irrelevant)
+
+# training
+forum_ind_train <- read_csv("Task_C_Datasets/forum_ind_train.csv")
+forum_dep_train <- read_csv("Task_C_Datasets/forum_dep_train.csv")
+
+# validation
+forum_ind_validation <- read_csv("Task_C_Datasets/forum_ind_validation.csv")
+forum_dep_validation <- read_csv("Task_C_Datasets/forum_dep_validation.csv")
+
+# testing
+forum_ind_test <- read_csv("Task_C_Datasets/forum_ind_test.csv")
+forum_dep_test <- read_csv("Task_C_Datasets/forum_dep_test.csv")
 ```
 
-
-## 1. 
-```{R}
-
-```
+## 1. Please build multiple predictive models using methods you consider appropriate. Train each model on the training set and evaluate its performance on the validation set using the F1 score. Compare the models and identify which one performs best.
 
 ```{R}
-
-```
-
-```{R}
-
-```
-
-```{R}
-
-```
-
-```{R}
-
-```
-
-```{R}
-
+forum_ind_train
+forum_dep_train
 ```
 
 ```{R}
@@ -56,3 +59,27 @@ Load dataset
 ```{R}
 
 ```
+
+```{R}
+
+```
+
+```{R}
+
+```
+
+```{R}
+
+```
+
+```{R}
+
+```
+
+```{R}
+
+```
+
+## 2. Please Your model's performance depends on how complex you allow it to be. Investigate this relationship for your chosen model and present a visualisation as evidence that lets you reason about underfitting, overfitting, and the bias-variance trade-off. Use what you find to justify the complexity of your final model.
+
+## 3. Please notice that the groundtruth label values in the file “forum_dep_test.csv” are withheld for now, but they will be shared after the due date of this assignment. Here, your task is to use the best-performing model constructed from Question 1 to predict the label of the posts contained in the file "forum_dep_test.csv”. You need to populate your prediction results (i.e., the predicted label values) into the file “forum_dep_test.csv” and upload it to Moodle to measure the overall performance of your model. Please ensure the number of columns and rows and column names remains the same as in the original file (in the file “forum_dep_test.csv”), and only fill in the prediction results in the 'label' column. 
