@@ -1,0 +1,58 @@
+---
+title: "assignment4_taskC"
+output: pdf_document
+date: "2026-10-29"
+---
+# Task B: Exploratory Data Analysis Using R
+
+Load library
+```{R}
+
+```
+
+Load dataset
+```{R}
+
+```
+
+
+## 1. 
+```{R}
+
+```
+
+```{R}
+
+```
+
+```{R}
+
+```
+
+```{R}
+
+```
+
+```{R}
+
+```
+
+```{R}
+
+```
+
+```{R}
+
+```
+
+```{R}
+
+```
+
+```{R}
+
+```
+
+```{R}
+
+```
