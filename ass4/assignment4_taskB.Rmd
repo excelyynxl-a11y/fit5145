@@ -709,19 +709,7 @@ potential_property %>%
   arrange(suburb, sold_date)
 ```
 
-```{R}
-potential_property %>%
-  ggplot(aes(price_num)) +
-  geom_histogram(bins = 20) +
-  coord_cartesian(xlim = c(0, 3e6)) +
-  scale_x_continuous(labels = scales::label_comma()) +
-  facet_wrap(~ suburb, scales = "free_y") +
-  labs(
-    title = "Distribution of price_num",
-    x = "Price (AUD)",
-    y = "Count"
-  )
-```
+Next, we observe the trend in each suburb on how property prices progress across the years. We use a scattered plot with each panel representing a suburb.
 
 ```{R}
 ggplot(potential_property, aes(x = sold_date, y = price_num)) +
@@ -734,4 +722,61 @@ ggplot(potential_property, aes(x = sold_date, y = price_num)) +
     y = "Price (AUD)"
   ) +
   theme_minimal()
+```
+
+```{R}
+potential_property %>% count(suburb)
+```
+
+```{R}
+predict_date <- as.Date("2026-11-01")
+
+nov_2026_predictions <- potential_property %>%
+  group_by(
+    suburb
+  ) %>%
+  nest() %>%
+  mutate(
+    model = map(data, ~ lm(price_num ~ sold_date, data = .x)),
+    predicted_price = map_dbl(model, ~ predict(.x, newdata = data.frame(sold_date = predict_date)))
+  ) %>%
+  select(
+    suburb, predicted_price
+  ) %>%
+  arrange(desc(predicted_price))
+
+nov_2026_predictions
+```
+
+```{R}
+pred_points <- nov_2026_predictions %>%
+  mutate(
+    sold_date = predict_date,
+    price_num = predicted_price
+  )
+
+ggplot(potential_property, aes(x = sold_date, y = price_num)) +
+  geom_point(alpha = 0.4, colour = "grey30") +
+  geom_smooth(
+    method = "lm",
+    se = FALSE,
+    fullrange = TRUE,
+    colour = "blue"
+  ) +
+  geom_point(
+    data = pred_points,
+    colour = "red",
+    size = 3
+  ) +
+  facet_wrap(
+    ~ suburb,
+    scales = "free_y"
+  ) +
+  scale_y_continuous() +
+  labs(
+    title = "Sold price over year with November 2026 prediction",
+    subtitle = "red point = predicted price (Nov 2026)",
+    x = "Sold date", y = "Price (AUD)"
+  ) +
+  theme_minimal() 
 ```
