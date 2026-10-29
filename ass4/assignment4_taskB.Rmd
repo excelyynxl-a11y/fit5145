@@ -550,8 +550,99 @@ Therefore, the 3 most important keywords in the description column that impact p
 
 ## 3. Owning property has long been considered a reliable way to build personal wealth. Which properties have experienced the highest price increases since their first sale? Please exclude properties where the time between the first and last sale exceeds five years. List the top five properties along with their address, capital gain, and the duration between the first and last sale.
 
+To analyse highest price increases since first sale, we continue using the ptv_price table created earlier with a price_num column with values of numerical value extracted from price column, midpoint from range-based price, descriptive-based price (eg: Contact agent) and NA excluded.
+
+We first observe if any property are sold more tan once across the years. Since each property full address is unique, repeated sales on te same property should be recorded as separated transaction id, with its full address remains the same. We count the amount of times a full address is recorded, filter only those that appear at least twice (since we need at least 2 sales to investigate properties that have experienced the highest price increases since their first sale).
+
 ```{R}
-ptv_price %>% head()
+ptv_price %>%
+  count(
+    full_address,
+    name = "n_sales"
+  ) %>%
+  filter(n_sales >= 2) %>%
+  arrange(desc(n_sales))
+```
+
+We observe that there are 3476 MA full address. Next, we check if counting by short address provide any different insights.
+
+```{R}
+ptv_price %>%
+  count(
+    short_address,
+    name = "n_sales"
+  ) %>%
+  filter(n_sales >= 2) %>%
+  arrange(desc(n_sales))
+```
+
+Similarly, 3476 of NA short address.
+
+Without full address and short address, we cannot determine the particular property. Although we may have suburb, state and postcode, but a single \<suburb\>\<state\>\<postcode\> may have several properties present in it. We do not have other values to impute the missing full address and short address. Hence, the 3476 cases with missing full address and short address will be dropped.
+
+We create a new table of ptv_address that filters out NA full address and NA short address. Then, group by full_address and count each property sales throughout the years, recording its first and last sold year, first and last sold price.
+
+```{R}
+ptv_address <- ptv_price %>%
+  # drop cases with NA full_address and short_address
+  filter(
+    !is.na(full_address),
+    !is.na(short_address)
+  ) %>% 
+  group_by(
+    full_address
+  ) %>%
+  mutate(
+    n_sales = n(),
+    first_date = min(sold_date),
+    last_last = max(sold_date),
+    first_year = year(first_date),
+    last_year = year(last_date),
+    first_price = price_num[which.min(sold_date)],
+    last_price = price_num[which.max(sold_date)],
+    .groups = "drop"
+  ) %>%
+  filter(n_sales >= 2) %>%
+  arrange(desc(n_sales))
+
+ptv_address %>% select(full_address, short_address, n_sales)
+```
+
+```{R}
+ptv_address %>% 
+  arrange(
+    suburb, 
+    postcode, 
+    street_name, 
+    street_number, 
+    unit
+  ) %>% 
+  select(
+    short_address,
+    unit,
+    street_number, 
+    street_name, 
+    sold_date
+  )
+```
+
+```{R}
+ptv_address %>%
+  count(
+    full_address,
+    name = "n_sales"
+  ) %>%
+  filter(n_sales >= 2) %>%
+  arrange(desc(n_sales))
+
+ptv_address %>% 
+  filter(
+    full_address == "132-134 Maroondah Highway, Mooroolbark, Vic 3138"
+  ) %>%
+  select(
+    full_address,
+    short_address
+  )
 ```
 
 ## 4. Chris is looking for a renovated house to purchase. He wants the property to be close to a shopping centre, and since he has an 8-year-old son, proximity to a primary school is also important. He is looking for a home with 4 bedrooms and 2 bathrooms. Currently, he is considering six suburbs - Mulgrave, Vermont South, Doncaster East, Rowville, Glen Waverley, and Wheelers Hill and plans to choose one from this list. Please provide the predicted price for November 2026 of a house that meets the above criteria in each of the six suburbs, and display the predicted price alongside the corresponding suburb name. (Note: When you build the prediction model, please use only the provided dataset and the period it covers.)
