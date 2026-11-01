@@ -16,6 +16,7 @@ library(tokenizers)
 library(textstem)
 library(wordcloud2)
 library(broom)
+library(rpart)
 ```
 
 Load dataset.
@@ -434,22 +435,24 @@ We observed:
 
 - Sparsity = 100%, indicating 100% of values in matrix is zero. However, this is due to rounding up as calculated from (3110421323 - 3712687)/3110421323 \* 100% = 99.88%.
 
-Next, we will remove sparse term from desc_dtm. Sparse value (= x) used means if term appears less than (x \* 100%) in all documents, we remove it.
+- 83542 terms need to be consider, which includes terms that are rare. Including rare terms can leads to unreliable conclusion, overfitting on regression tree approach and false discovery.
+
+Next, we will remove sparse term from desc_dtm. Sparse value (= x) used means if term appears less than (x \* 100%) in all documents, we remove it. The trade-off is that keywords used in fewer than 10% of descriptions could not be assessed.
 
 ```{R}
-desc_dtm_spar_070 <- removeSparseTerms(desc_dtm, 0.70)
+desc_dtm_spar <- removeSparseTerms(desc_dtm, 0.90)
 
-inspect(desc_dtm_spar_070)
+inspect(desc_dtm_spar)
 ```
 
-Sparsity value 0.7 is used, retaining 43 term respectively.
+After sparsity value 0.9 is used, terms retained is reduced from 83542 to 220 terms.
 
 We then create a term_appearance binary table to indicate is a term is present in this particular text of not (yes = TRUE = 1, no = FALSE = 0).
 
 ```{R}
 # get count > 0 and multiple by 1 to obtain a TRUE = 1 and FALSE = 0
 # 1 indicate the term is mentioned, 0 indicate the term is not mention in docs/description
-term_appearance <- as.data.frame(as.matrix(desc_dtm_spar_070) > 0) * 1
+term_appearance <- as.data.frame(as.matrix(desc_dtm_spar) > 0) * 1
 
 term_appearance %>% head()
 ```
@@ -541,40 +544,64 @@ desc_df <- desc %>%
 desc_df %>% head() 
 ```
 
-To analyse the correlation between each keyword and price (compared against log_price), we produce a linear regression to observe the estimate (β); the higher the β, the stronger the correlation between the particular keyword and price.
+### Regression tree
+
+To rank each keyword importance / influence on log(price), we use regression tree technique. Regression tree works by recursively splitting nodes and building a binary tree structure. It splits by keyword presence indicated by 0/1.
 
 ```{R}
-lm_fit <- lm(log_price ~ ., data = desc_df)
+# create regression fit
+desc_rp_fit <- rpart(log_price ~ ., data = desc_df)
 
-tidy(lm_fit) %>% 
-  mutate(
-    # price_effect = exp(β)-1 since log_price is log(price_num)
-    price_effect = exp(estimate) - 1
-  ) %>%
-  select(
-    term,
-    estimate,
-    price_effect,
-    p.value
-  ) %>%
-  arrange(desc(estimate))
+# create importance table
+var_importance <- tibble(
+  variable = names(desc_rp_fit$variable.importance),
+  importance = desc_rp_fit$variable.importance
+)
+
+var_importance
 ```
 
-From the linear regression of log(price_num) on keyword indicator identified top 3 keyword with largest postiive association with price, with estimate (β):
+To interpret the result from var_importance table:
 
-1.  "dine" (β = 0.164)
-2.  "family" (β = 0.150)
-3.  "garden" (β = 0.136)
+- variable: Refer to the keyword (prefixed with "term\_" earlier)
 
-Since we are comparing log(price_num), we will convert the coefficient (β) with price_effect = exp(β)-1:
+- importance: Refer to significance magnitude of the term on log(price). These values are relative and not percentage. A larger value means the variable does more to separate high-priced from low-priced listings.
 
-1.  "dine" (price_effect = 0.179 = 17.9%)
-2.  "family" (price_effect = 0.162 = 16.2%)
-3.  "garden" (price_effect = 0.146 = 14.6%)
+We further process var_importance by removing prefix "term\_" and generate an interpretable importance percentage.
 
-This means these 3 keywords impact property price by 17.9%, 16.2% and 14.6% respectively.
+```{R}
+var_importance <- var_importance %>%
+  mutate(
+    variable = str_remove(variable, "^term_"),
+    imp_percentage = round(100 * importance / sum(importance), 1)
+  ) %>%
+  arrange(desc(imp_percentage))
 
-Therefore, the 3 most important keywords in the description column that impact property prices are "dine", "family" and "garden".
+var_importance
+```
+
+The result of top 3 most important keywords in the description column that impact property prices are:
+
+1.  "zone" (importance percentage = 47.1%)
+2.  "residence" (importance percentage = 23.9%)
+3.  "dine" (importance percentage = 14.5%)
+
+Additionally, to visualise the importance of each keyword on log(price), we use a simple line plot of keywords against their variable.importance.
+
+```{R}
+var_importance %>%
+  mutate(
+    variable = fct_reorder(variable, importance)
+  ) %>%
+  ggplot(aes(x = importance, y = variable)) +
+  geom_segment(aes(x = 0, variable, xend = importance, yend = variable)) +
+  geom_point(colour = "red") +
+  labs(
+    title = "Keyword importance on property's pricing"
+  )
+```
+
+Therefore, the 3 most important keywords in the description column that impact property prices are "zone", "residence" and "dine".
 
 ## 3. Owning property has long been considered a reliable way to build personal wealth. Which properties have experienced the highest price increases since their first sale? Please exclude properties where the time between the first and last sale exceeds five years. List the top five properties along with their address, capital gain, and the duration between the first and last sale.
 
