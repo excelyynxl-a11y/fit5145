@@ -93,6 +93,23 @@ forum_ind_test %>% count(demographic_sex)
 
 ## 1. Please build multiple predictive models using methods you consider appropriate. Train each model on the training set and evaluate its performance on the validation set using the F1 score. Compare the models and identify which one performs best.
 
+### Dataset usage 
+
+The 6 dataset loaded previouslyc consist of 3 splits x 2 file types.
+
+The 2 file types:
+
+1.  independent (ind): Predictors. Contains fields of Unique_ID, LIWC columns, unit_faculty and demographic_sex.
+2.  dependent (dep): Unique_ID and label (Content-relevant or Content-irrelevant)
+
+Each split need both files (dep and ind) joined by Unique_ID to give a complete labelled dataset. The 3 splits are:
+
+1.  Training: Used to teach models. Also be used at EDA stage, data cleaning, preprocessing parameter, fitting models.
+
+2.  Validation: Used to score and compare models. After training a model, we feed the model independent value from validation set to get prediction, then compare it to dependent labels to compute F1 and confusion matrix. This allows us to decide which model is best.
+
+3.  Test: Used to generate final predictions. After selecting the best model, we feed the model with independent value of test set. Realise that dependent value of test set does not contain any value as it is meant to just save the computed prediction from the chosen best model.
+
 ### Candidate predictive models and appropriation reasoning
 
 ```{R}
