@@ -718,8 +718,9 @@ Create a potential_property table that contain property that meets Chris's crite
 
 - Renovated property, determine from the appearance of "renovated, refurbish, updated, modernize, remodel" keyword from description column.
 
-```{R}
+Recalling previous log transformation on price_num field (in Q2: 2 histogram plots revealed raw price_num is right-skewed whereas after a log transformation, the distribution of log(price_num) is less skewed). Similarly, we will log transform price_num to reduces the influence of extreme values, making spread more even over time and bring residual closer to normal. After model prediction using log(price_num), we will return the real estimate of property price in November 2026 using exp().
 
+```{R}
 potential_property <- ptv_price %>%
   filter(
     # house type
@@ -747,6 +748,7 @@ potential_property <- ptv_price %>%
   mutate(
     sold_month = month(sold_date),
     sold_year = year(sold_date),
+    # logarise price_num
     log_price = log(price_num)
   )
 
@@ -755,26 +757,26 @@ potential_property %>%
   arrange(suburb, sold_year, sold_month)
 ```
 
-Next, we observe the trend in each suburb on how property prices progress across the years. We use a scattered plot with each panel representing a suburb.
+Next, we observe the trend in each suburb on how property prices progress across the years. Since log(price_num) and sold date are both continuous, a scatterplot is a suitable way to see how one changes with the other, faceting by suburb because revela any suburb distinguishable price trend. Thus, we use a scattered plot with each panel representing a suburb.
 
 ```{R}
-ggplot(potential_property, aes(x = sold_date, y = price_num)) +
+ggplot(potential_property, aes(x = sold_date, y = log_price)) +
   geom_point(alpha = 0.4) +
   geom_smooth(method = "lm", se = FALSE, colour = "red") +
   facet_wrap(~ suburb, scales = "free_y") +
   labs(
     title = "Sold price over time by suburb",
+    subtitle = "4 bedrooms, 2 bathrooms, renovated, near primary school and shopping center",
     x = "Sold date", 
-    y = "Price (AUD)"
+    y = "log(price in AUD)"
   ) +
   theme_minimal()
 ```
 
-```{R}
-potential_property %>% count(suburb)
-```
+We observed the scatterplot across all 6 suburbs are roughly linear without any off trend (eg: curve, parabola). Linear model is suitable as it also suits the question asking for a prediction for a defined type of house at a future date (November 2026), so a single-predictor trend model (log_price \~ sold_date) fits it.
 
 ```{R}
+# set november 2026 as "2026-11-01" as x-factor used is Date format
 predict_date <- as.Date("2026-11-01")
 
 nov_2026_predictions <- potential_property %>%
@@ -783,25 +785,46 @@ nov_2026_predictions <- potential_property %>%
   ) %>%
   nest() %>%
   mutate(
-    model = map(data, ~ lm(price_num ~ sold_date, data = .x)),
-    predicted_price = map_dbl(model, ~ predict(.x, newdata = data.frame(sold_date = predict_date)))
+    # using linear model: log_price ~ sold_date
+    model = map(data, ~ lm(log_price ~ sold_date, data = .x)),
+    # predict log price by applying the linear model
+    predicted_log_price = map_dbl(model, ~ predict(.x, newdata = data.frame(sold_date = predict_date))),
+    # convert back to price_num with exp() 
+    predicted_price = exp(predicted_log_price)
   ) %>%
+  ungroup() %>%
   select(
-    suburb, predicted_price
+    suburb, predicted_price, predicted_log_price
   ) %>%
-  arrange(desc(predicted_price))
+  arrange(desc(predicted_log_price))
 
 nov_2026_predictions
 ```
+
+The predicted price of property that matched Chris's criteria in November 2026 for each suburbs are:
+
+- Glen Waverley: 2295968 AUD
+
+- Vermont South: 2004586 AUD
+
+- Wheelers Hill: 1825780 AUD
+
+- Doncaster East: 1781702 AUD
+
+- Rowville: 1583112 AUD
+
+- Mulgrave: 1289867 AUD
+
+Additionally for visualisation, we use the predicted log(price), we plot a similar plot of "Sold price over year with November 2026 prediction" with an additional red dots signifying the log(predicted_price) to observe how it fits on the linear model used (log_price \~ sold_date).
 
 ```{R}
 pred_points <- nov_2026_predictions %>%
   mutate(
     sold_date = predict_date,
-    price_num = predicted_price
+    log_price = predicted_log_price
   )
 
-ggplot(potential_property, aes(x = sold_date, y = price_num)) +
+ggplot(potential_property, aes(x = sold_date, y = log_price)) +
   geom_point(alpha = 0.4, colour = "grey30") +
   geom_smooth(
     method = "lm",
@@ -821,8 +844,8 @@ ggplot(potential_property, aes(x = sold_date, y = price_num)) +
   scale_y_continuous() +
   labs(
     title = "Sold price over year with November 2026 prediction",
-    subtitle = "red point = predicted price (Nov 2026)",
-    x = "Sold date", y = "Price (AUD)"
+    subtitle = "red point = predicted log(price in Nov 2026)",
+    x = "Sold date", y = "log(price in AUD)"
   ) +
   theme_minimal() 
 ```
