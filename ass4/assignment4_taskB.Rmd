@@ -34,76 +34,82 @@ glimpse(ptv)
 
 ### Data cleaning
 
-Observe id. Since id is unique transaction record, no duplicated should exist.
+Observe id. Since id is unique transaction record, no duplicated should exist. This is done to avoid duplicated records of the same sale from affecting the total property transaction count.
 
 ```{R}
 ptv %>% count(id) %>% filter(n>=2)
 ```
 
-We observed 1756 id are repeated. We save the id and observe the cases.
+We observed 1756 id are repeated twice. We save the id and observe the cases.
 
 ```{R}
 repeated_id <- ptv %>%
   group_by(
     id
   ) %>%
-  mutate(
+  summarise(
     n = n()
   ) %>%
   filter(
     n >= 2
-  )
+  ) %>%
+  select(id)
 
 repeated_id
+
+ptv %>%
+  semi_join(
+    repeated_id,
+    by = "id"
+  ) %>%
+  arrange(id)
 ```
 
-Check how many row contains NA cases.
+Across all fields of the cases with duplicated id, their values are repeated. Hence, we will only keep one row and drop of the redundant repeated case.
 
 ```{R}
-ptv %>% 
-  filter(
-    if_any(everything(), is.na)
-  )
+ptv_distinct <- ptv %>% distinct()
+ptv_distinct %>% count(id) %>% filter(n >= 2)
 ```
 
-Since a all 418390 rows contains NA fields, we will clean them as we work through each section based on the context of task requirements.
+Now we will use ptv_distinct for the remaining. All previous repeated duplicated cases from ptv has been removed and ptv_distinct contains only valid distinct transaction.
 
 Observe state. Since the name of dataset to analyse is property_transaction_victoria.csv, we will adhere to the name. We are only interested in analysing properties in Victoria (Vic). Other irrelevant state observe will be drop off later.
 
 ```{R}
-ptv %>% count(state) 
+ptv_distinct %>% count(state) 
 ```
 
 We observe odd states of NT and Qld, which will be drop of before data analysis later. Then, observe the NA state cases.
 
 ```{R}
-ptv %>% filter(
+ptv_distinct %>% filter(
   is.na(state)
 )
 ```
 
-We observe all 21 cases with NA state. These 21 cases are NA across all fields, signifying they are empty cases without any meaning. hence we will drop of these cases later.
+We observe all 1 cases with NA state. The case is NA across all fields, signifying it is an empty case without any meaning. hence we will drop of the case later.
 
 Observe cases with NA suburb.
 
 ```{R}
-ptv %>% filter(is.na(suburb))
+ptv_distinct %>% filter(is.na(suburb))
 ```
 
-We observe all 21 cases with NA suburb are empty meaningless cases, which are the same as before.
+We observe all 1 case with NA suburb is empty meaningless cases, which is the same as before.
 
 Observe badge to check if we can filter by sold records.
 
 ```{R}
-ptv %>% count(badge)
+ptv_distinct %>% count(badge)
 ```
 
-We observe all 21 cases with NA badge are empty meaningless cases, which are the same as before. The remaining are labelled "Sold".
+We observe all 1 case with NA badge are empty meaningless case, which are the same as before. The remaining are labelled "Sold" which match out analysis criteria.
 
 Observe any NA date or out of range date (we are only interested in 2010-2023).
 
 ```{R}
-ptv %>% 
+ptv_distinct %>% 
   filter(
     is.na(ymd(sold_date)) |
     year(sold_date) < 2010 |
@@ -113,7 +119,7 @@ ptv %>%
   arrange(sold_date)
 ```
 
-We observe 5218 cases contain NA sold date. All cases in dataset are within the valid year range (2010 - 2023).
+We observe 5186 cases contain NA sold date. All cases in dataset are within the valid year range (2010 - 2023).
 
 Although sold date are NA, the badge are still "Sold". Thus, we will consider cases with NA sold date when reporting our top 3 suburbs with the highest number of property transactions over the years.
 
@@ -121,14 +127,14 @@ However, since no other fields allow us to impute sold date, we will drop off al
 
 Now, we compile all the observation and create ptv_cleaned as such:
 
-- Remove all 21 empty cases
+- Remove all 1 empty case
 
 - Keep only "Vic" state
 
 ```{R}
-ptv_cleaned <- ptv %>%
+ptv_cleaned <- ptv_distinct %>%
   filter(
-    # remove the 21 meaningless NA rows
+    # remove the 1 meaningless NA rows
     !if_all(everything(), is.na),
     # Vic only
     state == "Vic"
@@ -154,9 +160,9 @@ ptv_cleaned %>%
 
 The top 3 suburb with highest number of property transaction over the years are:
 
-1.  Toorak
+1.  Melbourne
 
-2.  Melbourne
+2.  Toorak
 
 3.  Clyde North
 
@@ -322,12 +328,21 @@ set.seed(5145)
 
 ptv_10_perc_sample <- ptv_price %>% slice_sample(prop = 0.10)
 
-ptv_10_perc_sample %>% select(id, price_num, price, description) %>% arrange(desc(price_num))
+ptv_10_perc_sample %>% 
+  select(id, price_num, price, description) %>% 
+  arrange(desc(price_num))
 ```
+
+We will continue conducting textual analysis on 10% data stored in ptv_10_perc_sample, accounting for 36,738 descriptions.
 
 ### Pre-processing textual data
 
+To analyse textual data, we create a corpus object to enable a structured and efficient framework for working.
+
+We will use DataFrameSource() to handle conversion of data frame format to be processed and later used to create the corpus object out of it.
+
 ```{R}
+# doc_id is needed as DataframeSource() only accepts dataframe 2 columns of "doc_id" and "text"
 desc <- ptv_10_perc_sample %>%
   mutate(
     doc_id = row_number()
@@ -340,6 +355,7 @@ desc <- ptv_10_perc_sample %>%
 desc <- as.data.frame(desc)
 
 desc_source <- DataframeSource(desc)
+
 desc_corpus <- Corpus(desc_source)
 
 desc_corpus
@@ -351,7 +367,7 @@ Observe the first row in desc_corpus.
 inspect(desc_corpus[1:1])
 ```
 
-Text removal using:
+Next step, text removal are carried in several steps with the goal to:
 
 1.  Case normalization to lowercase: Ensures stop words can be matched consistently regardless of capitalization.
 2.  Remove stop words: Eliminate common words that don't carry much meaning.
@@ -396,7 +412,7 @@ Inspect the first row in desc_lemma after lemmatisation.
 inspect(desc_lemma[1])
 ```
 
-Verify if all the 10% descriptions exist in desc_lemma.
+Verify if all the 10% descriptions (36,738) exist in desc_lemma.
 
 ```{R}
 length(desc_lemma)
@@ -418,19 +434,7 @@ We observed:
 
 - Sparsity = 100%, indicating 100% of values in matrix is zero. However, this is due to rounding up as calculated from (3110421323 - 3712687)/3110421323 \* 100% = 99.88%.
 
-Next, we will remove sparse term from desc_dtm. Sparse value (= x) used means if term appears less than (x \* 100%) in all documents, we remove it. We try 3 different sparse values: 0.90, 0.8 and 0.7
-
-```{R}
-desc_dtm_spar_090 <- removeSparseTerms(desc_dtm, 0.90)
-
-inspect(desc_dtm_spar_090)
-```
-
-```{R}
-desc_dtm_spar_080 <- removeSparseTerms(desc_dtm, 0.80)
-
-inspect(desc_dtm_spar_080)
-```
+Next, we will remove sparse term from desc_dtm. Sparse value (= x) used means if term appears less than (x \* 100%) in all documents, we remove it.
 
 ```{R}
 desc_dtm_spar_070 <- removeSparseTerms(desc_dtm, 0.70)
@@ -438,7 +442,9 @@ desc_dtm_spar_070 <- removeSparseTerms(desc_dtm, 0.70)
 inspect(desc_dtm_spar_070)
 ```
 
-Sparsity value of 0.90, 0.8 and 0.7 were compared, retaining 221, 89 and 43 term respectively. Sparsity value = 0.7 was chosen because HELP MEEEE IDKKKKK HOWWWW DOOOOOOOOO URGHHHHH?????
+Sparsity value 0.7 is used, retaining 43 term respectively.
+
+We then create a term_appearance binary table to indicate is a term is present in this particular text of not (yes = TRUE = 1, no = FALSE = 0).
 
 ```{R}
 # get count > 0 and multiple by 1 to obtain a TRUE = 1 and FALSE = 0
@@ -556,25 +562,25 @@ tidy(lm_fit) %>%
 
 From the linear regression of log(price_num) on keyword indicator identified top 3 keyword with largest postiive association with price, with estimate (β):
 
-1.  "dine" (β = 0.151)
-2.  "garden" (β = 0.138)
-3.  "family" (β = 0.135)
+1.  "dine" (β = 0.164)
+2.  "family" (β = 0.150)
+3.  "garden" (β = 0.136)
 
 Since we are comparing log(price_num), we will convert the coefficient (β) with price_effect = exp(β)-1:
 
-1.  "dine" (price_effect = 0.164)
-2.  "garden" (price_effect = 0.148)
-3.  "family" (price_effect = 0.145)
+1.  "dine" (price_effect = 0.179 = 17.9%)
+2.  "family" (price_effect = 0.162 = 16.2%)
+3.  "garden" (price_effect = 0.146 = 14.6%)
 
-This means these 3 keywords impact property price by 16.4%, 14.8% and 14.5% respectively.
+This means these 3 keywords impact property price by 17.9%, 16.2% and 14.6% respectively.
 
-Therefore, the 3 most important keywords in the description column that impact property prices are "dine", "garden" and "family".
+Therefore, the 3 most important keywords in the description column that impact property prices are "dine", "family" and "garden".
 
 ## 3. Owning property has long been considered a reliable way to build personal wealth. Which properties have experienced the highest price increases since their first sale? Please exclude properties where the time between the first and last sale exceeds five years. List the top five properties along with their address, capital gain, and the duration between the first and last sale.
 
 To analyse highest price increases since first sale, we continue using the ptv_price table created earlier with a price_num column with values of numerical value extracted from price column, midpoint from range-based price, descriptive-based price (eg: Contact agent) and NA excluded.
 
-We first observe if any property are sold more tan once across the years. Since each property full address is unique, repeated sales on te same property should be recorded as separated transaction id, with its full address remains the same. We count the amount of times a full address is recorded, filter only those that appear at least twice (since we need at least 2 sales to investigate properties that have experienced the highest price increases since their first sale).
+We first observe if any property are sold more than once across the years. Since each property full address is unique, repeated sales on the same property should be recorded as separated transaction id, with its full address remains the same. We count the amount of times a full address is recorded, filter only those that appear at least twice (since we need at least 2 sales to investigate properties that have experienced the highest price increases since their first sale).
 
 ```{R}
 ptv_price %>%
@@ -586,7 +592,7 @@ ptv_price %>%
   arrange(desc(n_sales))
 ```
 
-We observe that there are 3476 MA full address. Next, we check if counting by short address provide any different insights.
+We observe that there are 3471 NA full address. Next, we check if counting by short address provide any different insights.
 
 ```{R}
 ptv_price %>%
@@ -598,9 +604,9 @@ ptv_price %>%
   arrange(desc(n_sales))
 ```
 
-Similarly, 3476 of NA short address.
+Similarly, 3471 of NA short address.
 
-Without full address and short address, we cannot determine the particular property. Although we may have suburb, state and postcode, but a single \<suburb\>\<state\>\<postcode\> may have several properties present in it. We do not have other values to impute the missing full address and short address. Hence, the 3476 cases with missing full address and short address will be dropped. Cases with NA sold_date and and price_num are also dropped as no other fields contains value to impute those missing values.
+Without full address and short address, we cannot determine the particular property. Although we may have suburb, state and postcode, but a single \<suburb\>\<state\>\<postcode\> may have several properties present in it. We do not have other values to impute the missing full address and short address. Hence, the 3471 cases with missing full address and short address will be dropped. Cases with NA sold_date and and price_num are also dropped as no other fields contains value to impute those missing values.
 
 We create a new table of ptv_sold_summary that:
 
@@ -635,12 +641,12 @@ ptv_sold_summary <- ptv_price %>%
   ) %>%
   arrange(desc(n_sales))
 
-ptv_sold_summary
+ptv_sold_summary %>% head()
 ```
 
 Next, we create valid_sold table:
 
-- Property n_sales at least twice .
+- Property n_sales at least twice.
 
 - Compute capital_gain = last_price - first_price
 
@@ -666,7 +672,7 @@ valid_sold <- ptv_sold_summary %>%
     -duration_year
   )
 
-valid_sold %>% arrange(desc(capital_gain))
+valid_sold %>% arrange(desc(capital_gain)) %>% head()
 ```
 
 Extract the top 5 properties that experienced the highest price increases since their first sale.
@@ -691,6 +697,8 @@ From top_5_ptv, the top 5 properties that experienced the highest price increase
 3.  27/1 Millar Road, Tullamarine, Vic 3043; capital gain = 319735000 AUD; duration = 3 years 8 months 4 days
 4.  9 Whernside Avenue, Toorak, Vic 3142; capital gain = 11000000 AUD; duration = 4 years 4 months 5 days
 5.  33 Grandview Grove, Prahran, Vic 3181; capital gain = 6680000 AUD; duration = 4 years 28 days
+
+An interesting observation amongst these top 5 properties: we use an original first price and last price instead of evaluating price increment in isolation over a fixed duration range. For example, 4385 South Gippsland Highway, Caldermeade, Vic 3984 experience the highest price increase across 10 months whereas 18 Keiller Avenue, Parkdale, Vic 3195 across a longer duration of 3 years 7 months 3 days. But, this does not disregard or signify that the property of Caldermeade which experience an exceptionally high increment of 4290467295 AUD over a short period of time is invalid as for the final reporting as we cannot verify any input error from the original dataset. Nevertherless, having further review to verify the validity of the top 3 (Caldermeade, Parkdale, Tullamarine) properties with higher capital gain compared to top 4, 5 (Toorak, Prahran) will provide a more precise and accurate reporting.
 
 ## 4. Chris is looking for a renovated house to purchase. He wants the property to be close to a shopping centre, and since he has an 8-year-old son, proximity to a primary school is also important. He is looking for a home with 4 bedrooms and 2 bathrooms. Currently, he is considering six suburbs - Mulgrave, Vermont South, Doncaster East, Rowville, Glen Waverley, and Wheelers Hill and plans to choose one from this list. Please provide the predicted price for November 2026 of a house that meets the above criteria in each of the six suburbs, and display the predicted price alongside the corresponding suburb name. (Note: When you build the prediction model, please use only the provided dataset and the period it covers.)
 
