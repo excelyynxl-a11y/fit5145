@@ -714,16 +714,23 @@ Create a potential_property table that contain property that meets Chris's crite
 
 - Located in suburbs: Mulgrave, Vermont South, Doncaster East, Rowville, Glen Waverley, Wheelers Hill
 
-- Close to shopping center and primary school, determine from the appearance of "shopping center/centre/mall" and "primary school" keyword from description column,
+- Close to shopping center and primary school, determine from the appearance of "shopping center/centre/mall" and "primary school" keyword from description column.
+
+- Renovated property, determine from the appearance of "renovated, refurbish, updated, modernize, remodel" keyword from description column.
 
 ```{R}
 
 potential_property <- ptv_price %>%
   filter(
+    # house type
     property_type == "house",
+    # 4 bedrooms
     bedrooms == 4,
+    # 2 bathrooms
     bathrooms == 2,
+    # specific suburbs
     suburb %in% c("Mulgrave", "Vermont South", "Doncaster East", "Rowville", "Glen Waverley", "Wheelers Hill"),
+    # shopping mall,  primary school, renovated mentions
     str_detect(
       description,
       regex("shopping\\s*(center|centre|mall)", ignore_case = TRUE)
@@ -731,12 +738,21 @@ potential_property <- ptv_price %>%
     str_detect(
       description,
       regex("primary\\s*school", ignore_case = TRUE)
+    ),
+    str_detect(
+      description,
+      regex("renovat|refurbish|updated|modernize|remodel", ignore_case = TRUE)
     )
-  ) 
+  ) %>%
+  mutate(
+    sold_month = month(sold_date),
+    sold_year = year(sold_date),
+    log_price = log(price_num)
+  )
 
 potential_property %>% 
-  select(sold_date, price_num, property_type, bedrooms, bathrooms, suburb, description, price_num) %>% 
-  arrange(suburb, sold_date)
+  select(log_price, sold_year, sold_month, property_type, bedrooms, bathrooms, suburb, description, price_num) %>% 
+  arrange(suburb, sold_year, sold_month)
 ```
 
 Next, we observe the trend in each suburb on how property prices progress across the years. We use a scattered plot with each panel representing a suburb.
