@@ -546,7 +546,7 @@ desc_df %>% head()
 
 ### Regression tree
 
-To rank each keyword importance / influence on log(price), we use regression tree technique. Regression tree works by recursively splitting nodes and building a binary tree structure. It splits by keyword presence indicated by 0/1.
+To rank each keyword importance / influence on log(price), we use regression tree technique. Regression tree works by recursively splitting nodes and building a binary tree structure. It splits by keyword presence indicated by 0/1. Regression tree is suitable because we are analysing the importance variable from a continuous numerical value (log_price).
 
 ```{R}
 # create regression fit
