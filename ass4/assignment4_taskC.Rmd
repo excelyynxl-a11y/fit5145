@@ -37,12 +37,63 @@ forum_ind_test <- read_csv("Task_C_Datasets/forum_ind_test.csv")
 forum_dep_test <- read_csv("Task_C_Datasets/forum_dep_test.csv")
 ```
 
+Observe each dataset.
+
+```{R}
+forum_ind_train %>% head()
+```
+
+```{R}
+forum_dep_train %>% head()
+```
+
+```{R}
+forum_ind_validation %>% head()
+```
+
+```{R}
+forum_dep_validation %>% head()
+```
+
+```{R}
+forum_ind_test %>% head()
+```
+
+```{R}
+forum_dep_test %>% head()
+```
+
+Observe unit faculty.
+
+```{R}
+forum_ind_train %>% count(unit_faculty)
+```
+
+```{R}
+forum_ind_validation %>% count(unit_faculty)
+```
+
+```{R}
+forum_ind_test %>% count(unit_faculty)
+```
+
+Observe demographic sex.
+
+```{R}
+forum_ind_train %>% count(demographic_sex)
+```
+
+```{R}
+forum_ind_validation %>% count(demographic_sex)
+```
+
+```{R}
+forum_ind_test %>% count(demographic_sex)
+```
+
 ## 1. Please build multiple predictive models using methods you consider appropriate. Train each model on the training set and evaluate its performance on the validation set using the F1 score. Compare the models and identify which one performs best.
 
-```{R}
-forum_ind_train
-forum_dep_train
-```
+### Candidate predictive models and appropriation reasoning
 
 ```{R}
 
@@ -52,9 +103,7 @@ forum_dep_train
 
 ```
 
-```{R}
-
-```
+### Model 1: Classification Tree 
 
 ```{R}
 
@@ -64,6 +113,18 @@ forum_dep_train
 
 ```
 
+### Model 2: Logistic Regression
+
+```{R}
+
+```
+
+```{R}
+
+```
+
+### Model 3: Ensemble (bagging) using Random Forrest
+
 ```{R}
 
 ```
@@ -71,6 +132,8 @@ forum_dep_train
 ```{R}
 
 ```
+
+### Model 4: Ensemble (boosting) using XGBoost
 
 ```{R}
 
@@ -82,4 +145,4 @@ forum_dep_train
 
 ## 2. Please Your model's performance depends on how complex you allow it to be. Investigate this relationship for your chosen model and present a visualisation as evidence that lets you reason about underfitting, overfitting, and the bias-variance trade-off. Use what you find to justify the complexity of your final model.
 
-## 3. Please notice that the groundtruth label values in the file “forum_dep_test.csv” are withheld for now, but they will be shared after the due date of this assignment. Here, your task is to use the best-performing model constructed from Question 1 to predict the label of the posts contained in the file "forum_dep_test.csv”. You need to populate your prediction results (i.e., the predicted label values) into the file “forum_dep_test.csv” and upload it to Moodle to measure the overall performance of your model. Please ensure the number of columns and rows and column names remains the same as in the original file (in the file “forum_dep_test.csv”), and only fill in the prediction results in the 'label' column. 
+## 3. Please notice that the groundtruth label values in the file “forum_dep_test.csv” are withheld for now, but they will be shared after the due date of this assignment. Here, your task is to use the best-performing model constructed from Question 1 to predict the label of the posts contained in the file "forum_dep_test.csv”. You need to populate your prediction results (i.e., the predicted label values) into the file “forum_dep_test.csv” and upload it to Moodle to measure the overall performance of your model. Please ensure the number of columns and rows and column names remains the same as in the original file (in the file “forum_dep_test.csv”), and only fill in the prediction results in the 'label' column.
