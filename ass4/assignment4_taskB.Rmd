@@ -34,6 +34,29 @@ glimpse(ptv)
 
 ### Data cleaning
 
+Observe id. Since id is unique transaction record, no duplicated should exist.
+
+```{R}
+ptv %>% count(id) %>% filter(n>=2)
+```
+
+We observed 1756 id are repeated. We save the id and observe the cases.
+
+```{R}
+repeated_id <- ptv %>%
+  group_by(
+    id
+  ) %>%
+  mutate(
+    n = n()
+  ) %>%
+  filter(
+    n >= 2
+  )
+
+repeated_id
+```
+
 Check how many row contains NA cases.
 
 ```{R}
@@ -45,13 +68,13 @@ ptv %>%
 
 Since a all 418390 rows contains NA fields, we will clean them as we work through each section based on the context of task requirements.
 
-(SHOULD WE CONSIDER ONLY VICTORIA ?????)
+Observe state. Since the name of dataset to analyse is property_transaction_victoria.csv, we will adhere to the name. We are only interested in analysing properties in Victoria (Vic). Other irrelevant state observe will be drop off later.
 
 ```{R}
 ptv %>% count(state) 
 ```
 
-Observe cases with NA state.
+We observe odd states of NT and Qld, which will be drop of before data analysis later. Then, observe the NA state cases.
 
 ```{R}
 ptv %>% filter(
@@ -59,7 +82,7 @@ ptv %>% filter(
 )
 ```
 
-We observe all 21 cases with NA state are empty meaning less cases. We will simply drop of these cases later.
+We observe all 21 cases with NA state. These 21 cases are NA across all fields, signifying they are empty cases without any meaning. hence we will drop of these cases later.
 
 Observe cases with NA suburb.
 
@@ -86,22 +109,21 @@ ptv %>%
     year(sold_date) < 2010 |
     year(sold_date) > 2023  
   ) %>%
-  select(id, sold_date) %>%
+  select(id, badge, sold_date) %>%
   arrange(sold_date)
 ```
 
-We observe 5218 cases contain NA sold date.
+We observe 5218 cases contain NA sold date. All cases in dataset are within the valid year range (2010 - 2023).
 
-Observe if other fields hints us on how to impute the NA sold_date.
+Although sold date are NA, the badge are still "Sold". Thus, we will consider cases with NA sold date when reporting our top 3 suburbs with the highest number of property transactions over the years.
 
-```{R}
-ptv %>% 
-  filter(
-    is.na(ymd(sold_date))
-  )
-```
+However, since no other fields allow us to impute sold date, we will drop off all cases with NA sold date at the stage where we plot their monthly transaction counts for the year 2022.
 
-Since no other fields allow us to impute sold date, we will drop off all cases with NA sold date.
+Now, we compile all the observation and create ptv_cleaned as such:
+
+- Remove all 21 empty cases
+
+- Keep only "Vic" state
 
 ```{R}
 ptv_cleaned <- ptv %>%
@@ -109,9 +131,7 @@ ptv_cleaned <- ptv %>%
     # remove the 21 meaningless NA rows
     !if_all(everything(), is.na),
     # Vic only
-    state == "Vic",
-    # remove NA sold_date
-    !is.na(ymd(sold_date))
+    state == "Vic"
   )
 
 ptv_cleaned
@@ -139,6 +159,8 @@ The top 3 suburb with highest number of property transaction over the years are:
 2.  Melbourne
 
 3.  Clyde North
+
+Toorak is already in the top 3 and will automatically be displayed on the plot without needing to explicitly adding Toorak in.
 
 We will save the 3 suburb names into a top_3_suburb table.
 
@@ -174,6 +196,8 @@ top_3_monthly_transaction_2022 <- ptv_cleaned %>%
     month = month(sold_date)
   ) %>%
   filter(
+    # as state previously, NA sold date are dropped when plotting since no other fields hint us on how to impute NA sold date
+    !is.na(sold_date),
     year == 2022
   ) %>%
   group_by(
@@ -188,13 +212,7 @@ top_3_monthly_transaction_2022 <- ptv_cleaned %>%
 top_3_monthly_transaction_2022
 ```
 
-We observe:
-
-1.  Clyde North has 12 months.
-2.  Melbourne has 12 months.
-3.  Toorak has only 11 months. (WHAT TO DOOOOO)
-
-### Monthly Transaction Count of 2022 by Suburb Visualisation
+### Monthly transaction count of 2022 by suburb visualisation
 
 We use a line chart to plot monthly transaction counts for the year 2022, with each suburb differentiated by the line color. A line chart is used because transaction count over time is continuous data, where the slope of the line viisualises trends, patterns and rate of change throughout 2022. Colored lines allows direct comparison of month-to-month trajectories across the 3 suburbs on a single plot.
 
@@ -239,7 +257,7 @@ To standardize the price, we will convert all price to numeric value instead of 
 
 We will create a new price_num column where the original price will be parse as such:
 
-1.  Raw value with "Contact agent" will result in NA after parsing, which will then be dropped off since there is no price signal.
+1.  Raw value with "Contact agent" will result in NA after parsing, which will then be dropped off since there is no price meaning to evaluate from.
 
 2.  Raw value of "\$ZZZ,ZZZ" is parsed to numerical ZZZZZZ
 
@@ -251,12 +269,14 @@ Observe description.
 ptv_cleaned %>% head(10) %>% select(description)
 ```
 
-We observe description fields are textual data.
+We observed description fields are textual data.
 
 Observe any NA description.
 
 ```{R}
 empty_desc <- ptv_cleaned %>% filter(is.na(description))
+
+empty_desc
 ```
 
 We will drop cases with NA description since no informational keywords-price relationship can be obtained if the description is NA itself.
@@ -289,7 +309,9 @@ ptv_price <- ptv_cleaned %>%
     !is.na(price_num)
   )
 
-ptv_price %>% select(id, price_num, price, description) %>% arrange(desc(price_num))
+ptv_price %>% 
+  select(id, price_num, price, description) %>% 
+  arrange(desc(price_num))
 ```
 
 Extract the 10% from ptv_price table.
