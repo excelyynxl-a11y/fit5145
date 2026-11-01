@@ -1,0 +1,7 @@
+---
+title: "assignment4_taskBC"
+output: html_document
+date: "2026-11-01"
+---
+# Task B and C combined
+# INSERT BOTH ASS HERE BEFORE SUBMISSION
