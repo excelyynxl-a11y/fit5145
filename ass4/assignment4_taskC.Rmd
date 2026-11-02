@@ -20,6 +20,7 @@ library(rpart)
 library(rpart.plot)
 library(caret)
 library(randomForest)
+library(xgboost)
 ```
 
 Load dataset
@@ -138,7 +139,7 @@ train_combined <- prep(forum_dep_train, forum_ind_train)
 valid_combined <- prep(forum_dep_validation, forum_ind_validation)
 ```
 
-Check for any NA cases in train_combined.
+Check for NA cases in train_combined.
 
 ```{R}
 train_combined %>% filter(if_any(everything(), is.na)) 
@@ -155,6 +156,24 @@ train_combined <- train_combined %>% filter(
 )
 
 train_combined %>% filter(if_any(everything(), is.na)) 
+```
+
+Check for NA cases in train_combined.
+
+```{R}
+valid_combined %>% filter(if_any(everything(), is.na))
+```
+
+We observed cases with Unique_ID 4076, 816 and 480 has NA appearing in demographic_sex and will also be dropped as an NA field complicates predictive model (eg: XBoost from xgbosst library) and dropping only 3 cases will not have significant impact on trained.
+
+```{R}
+valid_combined <- valid_combined %>% filter(
+  Unique_ID != 4076,
+  Unique_ID != 816,
+  Unique_ID != 480,
+)
+
+valid_combined %>% filter(if_any(everything(), is.na)) 
 ```
 
 Use identical factor levels across sets.
@@ -195,6 +214,8 @@ Visualise the classification tree split using a rpart.plot().
 rpart.plot(rp_fit_gini)
 ```
 
+Generate prediction with validation data and confusion matrix.
+
 ```{R}
 pred_ct_gini <- predict(rp_fit_gini, valid_combined, type = "class")
 
@@ -231,9 +252,7 @@ rf_base <- randomForest(
 rf_base
 ```
 
-```{R}
-plot(rf_base) 
-```
+Generate prediction with validation data and confusion matrix.
 
 ```{R}
 pred_rf <- predict(
@@ -253,13 +272,88 @@ Based on the confusion matrix, the total cases correctly classified is 131 + 362
 
 ### Model 3: Ensemble (boosting) using XGBoost
 
+XGBoost builds shallow trees one after another. Each new tree is fitted to the errors of the ensemble so far and its contribution is shrunk by a learning rate. It needs a numeric matrix and a 0/1 numeric label, differing from rpart (classification tree) and randomForest.
+
 ```{R}
+# remove Unique_ID for xgboost (frop intercept column)
+xgb_x_train <- model.matrix(label ~ . - 1, data = train_combined)
+xgb_x_valid <- model.matrix(label ~ . - 1, data = valid_combined)
+
+# label = 1 if content-relevant, label = 0 if content-orrelevant
+xgb_y_train <- as.numeric(train_combined$label == "Content-relevant")
+xgb_y_valid <- as.numeric(valid_combined$label == "Content-relevant")
 
 ```
 
-```{R}
+Fit a baseline XGB model
 
+```{R}
+dtrain <- xgb.DMatrix(
+  data = xgb_x_train,
+  label = xgb_y_train
+)
+
+dvalid <- xgb.DMatrix(
+  data = xgb_x_valid,
+  label = xgb_y_valid
+)
 ```
+
+Define the params (objective, evaluation matric, learning rate, depth) of the XGB model.
+
+```{R}
+params <- list(
+  objective = "binary:logistic",
+  eval_metric = "logloss",
+  eta = 0.1,
+  max_depth = 4,
+  subsample = 0.8,
+  colsample_bytree = 0.8
+)
+```
+
+Build the XGB model
+
+```{R}
+# seed for reproducibility
+set.seed(5145)
+
+xgb_base <- xgb.train(
+  params = params,
+  data = dtrain,
+  nrounds = 500
+)
+```
+
+Generate prediction with validation data and confusion matrix.
+
+```{R}
+probability_xgb <- predict(
+  xgb_base,
+  dvalid
+)
+
+# data and reference for confusionMatrix must be factors of the same levels 
+pred_xgb <- factor(
+  ifelse(
+    probability_xgb >= 0.5,
+    "Content-relevant",
+    "Content-irrelevant"
+  ),
+  levels = levels(valid_combined$label)
+)
+
+xgb_cm <- confusionMatrix(
+  pred_xgb,
+  valid_combined$label
+)
+
+xgb_cm
+```
+
+Based on the confusion matrix, the total cases correctly classified is 130 + 361 = 491, with an accuracy of 89%.
+
+### Chosen model
 
 ## 2. Please Your model's performance depends on how complex you allow it to be. Investigate this relationship for your chosen model and present a visualisation as evidence that lets you reason about underfitting, overfitting, and the bias-variance trade-off. Use what you find to justify the complexity of your final model.
 
