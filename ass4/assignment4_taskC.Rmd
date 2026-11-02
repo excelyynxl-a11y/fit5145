@@ -16,6 +16,9 @@ library(tokenizers)
 library(textstem)
 library(wordcloud2)
 library(broom)
+library(rpart)
+library(rpart.plot)
+library(caret)
 ```
 
 Load dataset
@@ -112,45 +115,92 @@ Each split need both files (dep and ind) joined by Unique_ID to give a complete 
 
 ### Candidate predictive models and appropriation reasoning
 
-```{R}
+### Joining tables
 
+```{R}
+# helper function to join tables by Unique_ID
+prep <- function(dep, ind) {
+  dep %>%
+    inner_join(
+      ind, 
+      by = "Unique_ID"
+    ) %>%
+    select(
+      -Unique_ID
+    ) %>%
+    mutate(
+      across(-c(label, unit_faculty, demographic_sex), as.numeric),
+      label = factor(label),
+      unit_faculty = factor(unit_faculty),
+      demoraphic_sex = factor(demographic_sex)
+    )
+}
+
+train_combined <- prep(forum_dep_train, forum_ind_train)
+valid_combined <- prep(forum_dep_validation, forum_ind_validation)
 ```
 
-```{R}
+Use identical factor levels across sets.
 
+```{R}
+valid_combined$unit_faculty <- factor(
+  valid_combined$unit_faculty,
+  levels = levels(train_combined$unit_faculty)
+)
+
+valid_combined$demographic_sex <- factor(
+  valid_combined$demographic_sex,
+  levels = levels(train_combined$demographic_sex)
+)
 ```
 
 ### Model 1: Classification Tree 
 
 ```{R}
+# seed for reproducibility
+set.seed(5145)
 
+rp_fit_gini <- rpart(
+  label ~ ., 
+  data = train_combined, 
+  parms = list(split = "gini"),
+  # grows a deliberately large tree (cp = 0) 
+  # runs 10-fold CV internally (xval = 10)
+  control = rpart.control(cp = 0, minsplit = 20, xval = 10)
+)
+
+rp_fit_gini
 ```
+
+```{R}
+rpart.plot(rp_fit_gini)
+```
+
+```{R}
+pred_gini <- predict(rp_fit_gini, valid_combined, type = "class")
+cm <- confusionMatrix(
+  pred_gini,
+  valid_combined$label
+)
+cm
+```
+
+Based on the confusion matrix, the total cases correctly classified is 116 + 343 = 459, with an accuracy of 82.7%.
+
+### Model 2: Ensemble (bagging) using Random Forrest
+
+Random forest builds many deep trees, each on a bootstrap sample of the rows and a random subset of features at every split. Then, let the trees vote. Votes will be averaged by related trees to cuts the variance that makes a single tree unstable.
 
 ```{R}
 
 ```
 
-### Model 2: Logistic Regression
-
 ```{R}
+
 
 ```
 
-```{R}
-
-```
-
-### Model 3: Ensemble (bagging) using Random Forrest
-
-```{R}
-
-```
-
-```{R}
-
-```
-
-### Model 4: Ensemble (boosting) using XGBoost
+### Model 3: Ensemble (boosting) using XGBoost
 
 ```{R}
 
