@@ -19,6 +19,7 @@ library(broom)
 library(rpart)
 library(rpart.plot)
 library(caret)
+library(randomForest)
 ```
 
 Load dataset
@@ -125,19 +126,35 @@ prep <- function(dep, ind) {
       ind, 
       by = "Unique_ID"
     ) %>%
-    select(
-      -Unique_ID
-    ) %>%
     mutate(
       across(-c(label, unit_faculty, demographic_sex), as.numeric),
       label = factor(label),
       unit_faculty = factor(unit_faculty),
-      demoraphic_sex = factor(demographic_sex)
+      demographic_sex = factor(demographic_sex)
     )
 }
 
 train_combined <- prep(forum_dep_train, forum_ind_train)
 valid_combined <- prep(forum_dep_validation, forum_ind_validation)
+```
+
+Check for any NA cases in train_combined.
+
+```{R}
+train_combined %>% filter(if_any(everything(), is.na)) 
+```
+
+We observe case wtth Unique_ID 60 have NA across all LIWC columns. Additionally, there are 4 rows that are NA across all fields. We will drop of these 5 cases as NA appears across almost all fields and cannot be imputed since we dont have the original text context. Another 2 cases with Unique_ID 129, 258 has NA appearing in demographic_sex and will also be dropped as an NA field complicates predictive model (eg: random forrest using RandomForrest from randomForrest library) and dropping only 2 cases will not have significant impact on trained model.
+
+```{R}
+train_combined <- train_combined %>% filter(
+  Unique_ID != 60,
+  !is.na(Unique_ID),
+  Unique_ID != 129,
+  Unique_ID != 258,
+)
+
+train_combined %>% filter(if_any(everything(), is.na)) 
 ```
 
 Use identical factor levels across sets.
@@ -172,17 +189,21 @@ rp_fit_gini <- rpart(
 rp_fit_gini
 ```
 
+Visualise the classification tree split using a rpart.plot().
+
 ```{R}
 rpart.plot(rp_fit_gini)
 ```
 
 ```{R}
-pred_gini <- predict(rp_fit_gini, valid_combined, type = "class")
-cm <- confusionMatrix(
-  pred_gini,
+pred_ct_gini <- predict(rp_fit_gini, valid_combined, type = "class")
+
+cm_ct_gini <- confusionMatrix(
+  pred_ct_gini,
   valid_combined$label
 )
-cm
+
+cm_ct_gini
 ```
 
 Based on the confusion matrix, the total cases correctly classified is 116 + 343 = 459, with an accuracy of 82.7%.
@@ -192,13 +213,43 @@ Based on the confusion matrix, the total cases correctly classified is 116 + 343
 Random forest builds many deep trees, each on a bootstrap sample of the rows and a random subset of features at every split. Then, let the trees vote. Votes will be averaged by related trees to cuts the variance that makes a single tree unstable.
 
 ```{R}
+# seed for reproducibility
+set.seed(5145)
 
+# rename the columns to syntactic names
+names(train_combined) <- make.names(names(train_combined))
+names(valid_combined) <- make.names(names(valid_combined))
+
+# random forest model with 500 trees
+rf_base <- randomForest(
+  label ~ .,
+  data = train_combined,
+  ntree = 500,
+  importance = TRUE
+)
+
+rf_base
 ```
 
 ```{R}
-
-
+plot(rf_base) 
 ```
+
+```{R}
+pred_rf <- predict(
+  rf_base,
+  valid_combined
+)
+
+rf_cm <- confusionMatrix(
+  pred_rf,
+  valid_combined$label
+)
+
+rf_cm
+```
+
+Based on the confusion matrix, the total cases correctly classified is 131 + 362 = 493, with an accuracy of 89.3%.
 
 ### Model 3: Ensemble (boosting) using XGBoost
 
