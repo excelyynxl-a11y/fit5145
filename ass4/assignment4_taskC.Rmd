@@ -409,4 +409,96 @@ A single classification tree was fitted first as an interpretable baseline whose
 
 ## 2. Please Your model's performance depends on how complex you allow it to be. Investigate this relationship for your chosen model and present a visualisation as evidence that lets you reason about underfitting, overfitting, and the bias-variance trade-off. Use what you find to justify the complexity of your final model.
 
+To investigate chosen model (random forest) complexity, we first note that:
+
+- Increasing number of trees (ntree) doesn’t overfit a model, hence is not a sole measure to a model's complexity
+
+- The parameters that control complexity are those that change how flexible each tree is. Maximum terminal nodes per tree (manipulated via maxnodes variable) is a good complexity axis. A smaller maxnodes give shallower tree, whereas a larger maxnodes give larger deeper tree (high variance tree).
+
+To detect overfittting/underfitting and rationalising overall complexity of random forest model, we analyse the relationship between misclassification error against maxnodes (log scaled when ploted on line plot) for all 3 datasets: training, validation and OOB (out-of-bag). Training and validation data are from combined dataset produced in Q1, whereas OOB are built-in way for a random forest to estimate its own test error without needing a separate validation set. In short, OOB will:
+
+1.  Find all the trees that did not see that row during training.
+2.  Let only those trees vote on its class.
+3.  Compare the majority vote to the true label.
+
+```{R}
+# seed for reproducibility
+set.seed(5145)
+
+# maxnodes log scaled
+node_grid <- c(2, 4, 8, 16, 32, 64, 128, 256, 512)
+
+results <- lapply(node_grid, function(mn) {
+  rf <- randomForest(
+    label ~ .,
+    data     = train_combined,
+    ntree    = 500,
+    maxnodes = mn
+  )
+  
+  train_pred <- predict(rf, train_combined)
+  valid_pred <- predict(rf, valid_combined)
+  
+  data.frame(
+    maxnodes  = mn,
+    # training error
+    train_err = mean(train_pred != train_combined$label),
+    # out-of-bag error
+    oob_err   = rf$err.rate[500, "OOB"],
+    # validatino error
+    valid_err = mean(valid_pred != valid_combined$label)
+  )
+}) %>% bind_rows()
+
+# long format for plotting
+plot_df <- results %>%
+  pivot_longer(
+    cols = c(
+      train_err, 
+      oob_err, 
+      valid_err
+    ),
+    names_to = "set", 
+    values_to = "error"
+  ) %>%
+  mutate(
+    set = recode(
+      set,
+      train_err = "Training error",
+      oob_err   = "OOB error",
+      valid_err = "Validation error"
+    )
+  )
+```
+
+Plot to visualise misclassification error agasint model complexity (represented by maxnodes) for all 3 data: training, validation, OOB.
+
+```{R}
+ggplot(plot_df, aes(x = maxnodes, y = error, colour = set, linetype = set)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  scale_x_log10(breaks = node_grid) +
+  labs(
+    title = "Random Forest: error vs model complexity (maxnodes)",
+    x = "Max terminal nodes per tree",
+    y = "Misclassification error",
+    colour = NULL, 
+    linetype = NULL
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom")
+```
+
+Observing from the plot:
+
+1.  At low maxnodes values (2-8), training, validation and OOB errors are relatively high (0.15 and above). This indicates the model with maxnodes 2-8 are highly underfitting, meaning they have high bias. Tree are too simple to capture LIWC patterns and influence on label.
+2.  At the middle section (maxnodes = 8-128), all training, validation and OOB errors falls with training error falling at highest rate showing the steepest gradient. This indicates bias has been reduced and variance is still controlled. Ideally, this section has a good balance between underfitting and overfitting.
+3.  At high maxnodes (128+), validation and OOB error are still flat and stable. However, training error continue dropping significantly until it reaches almost 0. This indicate the model overfitting on individual tree. The contrast gap between training and validation error is the variance and signify how model is only well-performed due to trained data and not when it comes to new external data.
+
+The insight highlights the complexity of chosen model (random forest):
+
+- Training error is misleading for random forests. Grown trees memorise the training data, so training error will be near 0 even when the model generalises fine.
+
+- Random forests plateau at certain point. For example, OOB and validation error falttens at middle maxnodes range because averaging many trees suppresses variance. This is a bias-variance trade-off as we see how bagging (combining several tree to produce random forrest instead of using a single classification tree) lets us use deep, low-bias trees without paying the full variance penalty.
+
 ## 3. Please notice that the groundtruth label values in the file “forum_dep_test.csv” are withheld for now, but they will be shared after the due date of this assignment. Here, your task is to use the best-performing model constructed from Question 1 to predict the label of the posts contained in the file "forum_dep_test.csv”. You need to populate your prediction results (i.e., the predicted label values) into the file “forum_dep_test.csv” and upload it to Moodle to measure the overall performance of your model. Please ensure the number of columns and rows and column names remains the same as in the original file (in the file “forum_dep_test.csv”), and only fill in the prediction results in the 'label' column.
