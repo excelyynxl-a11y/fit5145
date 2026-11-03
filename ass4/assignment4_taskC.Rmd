@@ -128,9 +128,18 @@ The data is labelled and the target is categorical, hence we will use a supervis
 To determine the best predictive model, we will structure the work as such:
 
 1.  Join tables to obtain combined train and validation dataset.
+
 2.  Create 3 tree models: single classification tree, random forest and XGBoost.
+
 3.  For each model, we will create it, train it using combined train dataset, evaluate its F1 score by putting combined validation dataset to a confusion matrix.
-4.  F1 and confusion matrix are used to evaluate the performance of each machine learning classification model. F1 is the final metric to be evaluated to determine which model is the best as F1 is defined as "out of all positive predictions the model made, how many were actually correct?"
+
+4.  Although F1 can be manually calculated using formula:
+
+    F1 = 2 \* (precision \* recall)/(precision + recall); precision = TP / (TP + FP); recall = TP / (TP + FN)
+
+    we will be using ConfusionMatrix build in F1 to obtain the F1 score.
+
+5.  F1 and confusion matrix are used to evaluate the performance of each machine learning classification model. F1 is the final metric to be evaluated to determine which model is the best as F1 is defined as "out of all positive predictions the model made, how many were actually correct?"
 
 ### Joining tables
 
@@ -207,7 +216,7 @@ valid_combined$demographic_sex <- factor(
 )
 ```
 
-### Model 1: Classification Tree 
+### Model 1: Classification Tree
 
 Classification tree recursively splits on the featurethat gives the purest child nodes (Gini). A post follows the splits to a leaf and the leaf’s majority class is the prediction.
 
