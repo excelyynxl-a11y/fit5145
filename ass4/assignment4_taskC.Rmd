@@ -98,7 +98,7 @@ forum_ind_test %>% count(demographic_sex)
 
 ## 1. Please build multiple predictive models using methods you consider appropriate. Train each model on the training set and evaluate its performance on the validation set using the F1 score. Compare the models and identify which one performs best.
 
-### Dataset usage 
+### Dataset analysis
 
 The 6 dataset loaded previouslyc consist of 3 splits x 2 file types.
 
@@ -117,7 +117,24 @@ Each split need both files (dep and ind) joined by Unique_ID to give a complete 
 
 ### Candidate predictive models and appropriation reasoning
 
+The data is labelled and the target is categorical, hence we will use a supervised classification to build the predictive model. The predictors are LIWC columns. Tree-based methods are suitable model candidates because:
+
+- Simple, no scaling or transformation required since splits depend only on rank order tolerate correlated predictors capture non-linear effects.
+
+- Interactions handle categorical predictors
+
+### Overall approach
+
+To determine the best predictive model, we will structure the work as such:
+
+1.  Join tables to obtain combined train and validation dataset.
+2.  Create 3 tree models: single classification tree, random forest and XGBoost.
+3.  For each model, we will create it, train it using combined train dataset, evaluate its F1 score by putting combined validation dataset to a confusion matrix.
+4.  F1 and confusion matrix are used to evaluate the performance of each machine learning classification model. F1 is the final metric to be evaluated to determine which model is the best as F1 is defined as "out of all positive predictions the model made, how many were actually correct?"
+
 ### Joining tables
+
+Train and validation dataset are joined by Unique_ID field.
 
 ```{R}
 # helper function to join tables by Unique_ID
@@ -176,7 +193,7 @@ valid_combined <- valid_combined %>% filter(
 valid_combined %>% filter(if_any(everything(), is.na)) 
 ```
 
-Use identical factor levels across sets.
+Use identical factor levels across sets for consistency.
 
 ```{R}
 valid_combined$unit_faculty <- factor(
@@ -191,6 +208,8 @@ valid_combined$demographic_sex <- factor(
 ```
 
 ### Model 1: Classification Tree 
+
+Classification tree recursively splits on the featurethat gives the purest child nodes (Gini). A post follows the splits to a leaf and the leaf’s majority class is the prediction.
 
 ```{R}
 # seed for reproducibility
@@ -208,12 +227,6 @@ rp_fit_gini <- rpart(
 rp_fit_gini
 ```
 
-Visualise the classification tree split using a rpart.plot().
-
-```{R}
-rpart.plot(rp_fit_gini)
-```
-
 Generate prediction with validation data and confusion matrix.
 
 ```{R}
@@ -221,13 +234,21 @@ pred_ct_gini <- predict(rp_fit_gini, valid_combined, type = "class")
 
 cm_ct_gini <- confusionMatrix(
   pred_ct_gini,
-  valid_combined$label
+  valid_combined$label,
+  positive = "Content-relevant",
+  mode = "prec_recall"
 )
+```
 
+```{R}
 cm_ct_gini
 ```
 
-Based on the confusion matrix, the total cases correctly classified is 116 + 343 = 459, with an accuracy of 82.7%.
+```{R}
+cm_ct_gini$byClass["F1"]
+```
+
+Based on the confusion matrix, the total cases correctly classified is 116 + 340 = 456, with an accuracy of 82.6%, where as the F1 score is 0.876.
 
 ### Model 2: Ensemble (bagging) using Random Forrest
 
@@ -262,13 +283,20 @@ pred_rf <- predict(
 
 rf_cm <- confusionMatrix(
   pred_rf,
-  valid_combined$label
+  valid_combined$label,
+  positive = "Content-relevant"
 )
+```
 
+```{R}
 rf_cm
 ```
 
-Based on the confusion matrix, the total cases correctly classified is 131 + 362 = 493, with an accuracy of 89.3%.
+```{R}
+rf_cm$byClass["F1"]
+```
+
+Based on the confusion matrix, the total cases correctly classified is 131 + 362 = 493, with an accuracy of 89.3%, whereas the F1 score is 0.925.
 
 ### Model 3: Ensemble (boosting) using XGBoost
 
@@ -285,7 +313,7 @@ xgb_y_valid <- as.numeric(valid_combined$label == "Content-relevant")
 
 ```
 
-Fit a baseline XGB model
+Fit a baseline XGB model.
 
 ```{R}
 dtrain <- xgb.DMatrix(
@@ -312,7 +340,7 @@ params <- list(
 )
 ```
 
-Build the XGB model
+Build the XGB model.
 
 ```{R}
 # seed for reproducibility
@@ -345,15 +373,30 @@ pred_xgb <- factor(
 
 xgb_cm <- confusionMatrix(
   pred_xgb,
-  valid_combined$label
+  valid_combined$label,
+  positive = "Content-relevant"
 )
+```
 
+```{R}
 xgb_cm
 ```
 
-Based on the confusion matrix, the total cases correctly classified is 130 + 361 = 491, with an accuracy of 89%.
+```{R}
+xgb_cm$byClass["F1"]
+```
 
-### Chosen model
+Based on the confusion matrix, the total cases correctly classified is 130 + 361 = 491, with an accuracy of 89%, whereas the F1 score is 0.922.
+
+### Model performance evaluation on the validation set using the F1 score
+
+Across all 3 models:
+
+1.  Single classification tree: F1 score = 0.876
+2.  Random forest: F1 score = 0.925
+3.  XGBoost: F1 score = 0.922
+
+A single classification tree was fitted first as an interpretable baseline whose rules can be read directly, and to establish how much signal the LIWC features carry (F1 = 0.876). Because single trees are high-variance, a random forest was added to test whether averaging decorrelated trees improves stability (F1 = 0.925). Lastly, XGBoost was added to test whether sequentially correcting errors reduces bias (F1 = 0.922). All 3 are scale-invariant and handle skewed, correlated LIWC predictors without transformation. The ensembles’ gain over the single tree supports variance as the main limitation of one tree, while the negligible gap between random forest and XGBoost suggests the data does not need the extra flexibility of boosting. Therefore, random forest (model 2) is the best performing model.
 
 ## 2. Please Your model's performance depends on how complex you allow it to be. Investigate this relationship for your chosen model and present a visualisation as evidence that lets you reason about underfitting, overfitting, and the bias-variance trade-off. Use what you find to justify the complexity of your final model.
 
