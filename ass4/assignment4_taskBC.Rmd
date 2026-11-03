@@ -3,5 +3,1455 @@ title: "assignment4_taskBC"
 output: html_document
 date: "2026-11-01"
 ---
-# Task B and C combined
-# INSERT BOTH ASS HERE BEFORE SUBMISSION
+
+# Task B: Exploratory Data Analysis Using R
+
+Load library
+
+```{R}
+library(tidyverse)
+library(lubridate)
+library(tm)
+library(tokenizers)
+library(textstem)
+library(wordcloud2)
+library(broom)
+library(rpart)
+```
+
+Load dataset.
+
+```{R}
+ptv <- read_csv("data/property_transaction_victoria.csv")
+```
+
+Observe raw dataset.
+
+```{R}
+glimpse(ptv)
+```
+
+## 1. Identify the top 3 suburbs with the highest number of property transactions over the years, and plot their monthly transaction counts for the year 2022. Include Toorak in the plot as well, if it is not among the top 3 suburbs.
+
+### Data cleaning
+
+Observe id. Since id is unique transaction record, no duplicated should exist. This is done to avoid duplicated records of the same sale from affecting the total property transaction count.
+
+```{R}
+ptv %>% count(id) %>% filter(n>=2)
+```
+
+We observed 1756 id are repeated twice. We save the id and observe the cases.
+
+```{R}
+repeated_id <- ptv %>%
+  group_by(
+    id
+  ) %>%
+  summarise(
+    n = n()
+  ) %>%
+  filter(
+    n >= 2
+  ) %>%
+  select(id)
+
+repeated_id
+
+ptv %>%
+  semi_join(
+    repeated_id,
+    by = "id"
+  ) %>%
+  arrange(id)
+```
+
+Across all fields of the cases with duplicated id, their values are repeated. Hence, we will only keep one row and drop of the redundant repeated case.
+
+```{R}
+ptv_distinct <- ptv %>% distinct()
+ptv_distinct %>% count(id) %>% filter(n >= 2)
+```
+
+Now we will use ptv_distinct for the remaining. All previous repeated duplicated cases from ptv has been removed and ptv_distinct contains only valid distinct transaction.
+
+Observe state. Since the name of dataset to analyse is property_transaction_victoria.csv, we will adhere to the name. We are only interested in analysing properties in Victoria (Vic). Other irrelevant state observe will be drop off later.
+
+```{R}
+ptv_distinct %>% count(state) 
+```
+
+We observe odd states of NT and Qld, which will be drop of before data analysis later. Then, observe the NA state cases.
+
+```{R}
+ptv_distinct %>% filter(
+  is.na(state)
+)
+```
+
+We observe all 1 cases with NA state. The case is NA across all fields, signifying it is an empty case without any meaning. hence we will drop of the case later.
+
+Observe cases with NA suburb.
+
+```{R}
+ptv_distinct %>% filter(is.na(suburb))
+```
+
+We observe all 1 case with NA suburb is empty meaningless cases, which is the same as before.
+
+Observe badge to check if we can filter by sold records.
+
+```{R}
+ptv_distinct %>% count(badge)
+```
+
+We observe all 1 case with NA badge are empty meaningless case, which are the same as before. The remaining are labelled "Sold" which match out analysis criteria.
+
+Observe any NA date or out of range date (we are only interested in 2010-2023).
+
+```{R}
+ptv_distinct %>% 
+  filter(
+    is.na(ymd(sold_date)) |
+    year(sold_date) < 2010 |
+    year(sold_date) > 2023  
+  ) %>%
+  select(id, badge, sold_date) %>%
+  arrange(sold_date)
+```
+
+We observe 5186 cases contain NA sold date. All cases in dataset are within the valid year range (2010 - 2023).
+
+Although sold date are NA, the badge are still "Sold". Thus, we will consider cases with NA sold date when reporting our top 3 suburbs with the highest number of property transactions over the years.
+
+However, since no other fields allow us to impute sold date, we will drop off all cases with NA sold date at the stage where we plot their monthly transaction counts for the year 2022.
+
+Now, we compile all the observation and create ptv_cleaned as such:
+
+- Remove all 1 empty case
+
+- Keep only "Vic" state
+
+```{R}
+ptv_cleaned <- ptv_distinct %>%
+  filter(
+    # remove the 1 meaningless NA rows
+    !if_all(everything(), is.na),
+    # Vic only
+    state == "Vic"
+  )
+
+ptv_cleaned
+```
+
+### Obtaining top 3 suburb with highest total transaction across the year (2010-2023)
+
+Group ptv_cleaned by suburb and get the total transaction of each suburb over the years (2010-2023)
+
+```{R}
+ptv_cleaned %>%
+  group_by(
+    suburb
+  ) %>%
+  summarise(
+    total_transaction_suburb = n()
+  ) %>%
+  arrange(desc(total_transaction_suburb))
+```
+
+The top 3 suburb with highest number of property transaction over the years are:
+
+1.  Melbourne
+
+2.  Toorak
+
+3.  Clyde North
+
+Toorak is already in the top 3 and will automatically be displayed on the plot without needing to explicitly adding Toorak in.
+
+We will save the 3 suburb names into a top_3_suburb table.
+
+```{R}
+top_3_suburb <- ptv_cleaned %>%
+  group_by(
+    suburb
+  ) %>%
+  summarise(
+    total_transaction_suburb = n()
+  ) %>%
+  arrange(desc(total_transaction_suburb)) %>%
+  select(suburb) %>%
+  head(3)
+
+top_3_suburb
+```
+
+### Obtain month transaction count in year 2022 of the top 3 suburbs
+
+To get the monthly transaction counts for year 2022 of these 3 suburb, we semi-join the top_3_suburb table with ptv_cleaned by suburb field. Then extract the year and month from sold_date field. Filter only rows from year 2022 and calculate the sum of transaction per month by grouping suburb and month.
+
+```{R}
+# monthly transaction counts for the year 2022
+
+top_3_monthly_transaction_2022 <- ptv_cleaned %>%
+  semi_join(
+    top_3_suburb,
+    by = "suburb"
+  ) %>%
+  mutate(
+    year = year(sold_date),
+    month = month(sold_date)
+  ) %>%
+  filter(
+    # as state previously, NA sold date are dropped when plotting since no other fields hint us on how to impute NA sold date
+    !is.na(sold_date),
+    year == 2022
+  ) %>%
+  group_by(
+    suburb,
+    month
+  ) %>%
+  summarise(
+    total_transaction = n()
+  )
+  
+
+top_3_monthly_transaction_2022
+```
+
+### Monthly transaction count of 2022 by suburb visualisation
+
+We use a line chart to plot monthly transaction counts for the year 2022, with each suburb differentiated by the line color. A line chart is used because transaction count over time is continuous data, where the slope of the line viisualises trends, patterns and rate of change throughout 2022. Colored lines allows direct comparison of month-to-month trajectories across the 3 suburbs on a single plot.
+
+```{R}
+ggplot(top_3_monthly_transaction_2022, aes(x = month, y = total_transaction, color = suburb)) + 
+  geom_line(linewidth = 1) +
+  scale_x_continuous(
+    breaks = 1:12,            
+    labels = month.abb
+  ) +
+  labs(
+    title = "Monthly Transaction Count of 2022 by Suburb",
+    x = "Month",
+    y = "Total Transaction",
+    color = "Suburb"
+  ) +
+  theme_minimal()
+```
+
+## 2. What are the 3 most important keywords in the description column that impact property prices? (Note: Since the description column contains a large volume of text, please extract a 10% sample from the original dataset to answer this question.)
+
+### Data cleaning
+
+Since the description column contains a large volume of text, we will extract 10% sample from the original dataset for this analysis.
+
+Observe price.
+
+```{R}
+ptv_cleaned %>% count(price) %>% arrange(desc(price))
+```
+
+We observe price has inconsistent categorisation, for example:
+
+1.  Range: \$XXXXXX- \$YYYYYY; that overlaps
+2.  Contact agent
+3.  \$ZZZZZZ
+
+To standardize the price, we will convert all price to numeric value instead of range-base because:
+
+1.  Range-based field disregards information such as the difference between \$980,000 - \$1,140,000.
+2.  Goal is to measure how keywords relate to price, which works best with a continuous price.
+
+We will create a new price_num column where the original price will be parse as such:
+
+1.  Raw value with "Contact agent" will result in NA after parsing, which will then be dropped off since there is no price meaning to evaluate from.
+
+2.  Raw value of "\$ZZZ,ZZZ" is parsed to numerical ZZZZZZ
+
+3.  Raw value of "Range: \$XXXXXX- \$YYYYYY" is parse to obtain the midpoint value.
+
+Observe description.
+
+```{R}
+ptv_cleaned %>% head(10) %>% select(description)
+```
+
+We observed description fields are textual data.
+
+Observe any NA description.
+
+```{R}
+empty_desc <- ptv_cleaned %>% filter(is.na(description))
+
+empty_desc
+```
+
+We will drop cases with NA description since no informational keywords-price relationship can be obtained if the description is NA itself.
+
+Compiling all the observation from price and description column, we create the new ptv_price table.
+
+```{R}
+# helper function to parse range-based price into numerical price
+parse_price <- function(x) {
+  # extract numerical value from string (eg: $XXX,XXX into XXXXXX)
+  nums <- str_extract_all(x, "[0-9]{1,3}(,[0-9]{3})+|[0-9]{5,}")
+  
+  # get the midpoint from range-based price
+  map_dbl(nums, ~ if (length(.x) == 0) NA_real_
+                else mean(as.numeric(str_remove_all(.x, ",")))) 
+}
+
+ptv_price <- ptv_cleaned %>%
+  mutate(
+    # parse price into numerical
+    price_num = parse_price(price)
+  ) %>%
+  filter(
+    # exclude NA description
+    !is.na(description),
+    # exclude invalid negative price 
+    price_num > 0,
+    # exclude NA price_num 
+    # (eg: price that are originally have no price signal like "Contact agent")
+    !is.na(price_num)
+  )
+
+ptv_price %>% 
+  select(id, price_num, price, description) %>% 
+  arrange(desc(price_num))
+```
+
+Extract the 10% from ptv_price table.
+
+```{R}
+# use seed for reproducibility
+set.seed(5145)
+
+ptv_10_perc_sample <- ptv_price %>% slice_sample(prop = 0.10)
+
+ptv_10_perc_sample %>% 
+  select(id, price_num, price, description) %>% 
+  arrange(desc(price_num))
+```
+
+We will continue conducting textual analysis on 10% data stored in ptv_10_perc_sample, accounting for 36,738 descriptions.
+
+### Pre-processing textual data
+
+To analyse textual data, we create a corpus object to enable a structured and efficient framework for working.
+
+We will use DataFrameSource() to handle conversion of data frame format to be processed and later used to create the corpus object out of it.
+
+```{R}
+# doc_id is needed as DataframeSource() only accepts dataframe 2 columns of "doc_id" and "text"
+desc <- ptv_10_perc_sample %>%
+  mutate(
+    doc_id = row_number()
+  ) %>%
+  select(
+    doc_id,
+    text = description
+  )
+
+desc <- as.data.frame(desc)
+
+desc_source <- DataframeSource(desc)
+
+desc_corpus <- Corpus(desc_source)
+
+desc_corpus
+```
+
+Observe the first row in desc_corpus.
+
+```{R}
+inspect(desc_corpus[1:1])
+```
+
+Next step, text removal are carried in several steps with the goal to:
+
+1.  Case normalization to lowercase: Ensures stop words can be matched consistently regardless of capitalization.
+2.  Remove stop words: Eliminate common words that don't carry much meaning.
+3.  Remove punctuation: Remove punctuation that don't contribute to the meaning of text.
+4.  Remove numbers: Numerical digits do not contribute much to the meaning of text
+5.  Strip whitespace: For consistency.
+
+```{R}
+desc_corpus <- tm_map(desc_corpus, content_transformer(tolower))
+
+desc_corpus <- tm_map(desc_corpus, removeWords, stopwords("english")) 
+
+desc_corpus <- tm_map(desc_corpus, removePunctuation)
+
+desc_corpus <- tm_map(desc_corpus, removeNumbers)
+
+desc_corpus <- tm_map(desc_corpus, stripWhitespace)
+
+```
+
+Observe the first row in desc_corpus after text removal.
+
+```{R}
+inspect(desc_corpus[1:1])
+```
+
+We will reduce words to their base forms to reduce sparsity and improve the efficiency and accuracy of text analysis in description column. Lemmatisation technique is used because we want the output to be a valid word (unlike stemming technique that may return partial/prefixes/suffix of an original word).
+
+```{R}
+# define helper function to lemmatise text
+lemmatize_text <- function(text) {
+  lemmatised <- lemmatize_strings(text)
+  return (lemmatised)
+}
+
+desc_lemma <- tm_map(desc_corpus, content_transformer(lemmatize_text))
+```
+
+Inspect the first row in desc_lemma after lemmatisation.
+
+```{R}
+inspect(desc_lemma[1])
+```
+
+Verify if all the 10% descriptions (36,738) exist in desc_lemma.
+
+```{R}
+length(desc_lemma)
+```
+
+### Feature extraction
+
+After text pre-processing, we will represent the pre-processed words as numerical expression.
+
+We will build a Document Term Matrix called desc_dtm to observe the sparsity
+
+```{R}
+desc_dtm <- DocumentTermMatrix(desc_lemma)
+
+inspect(desc_dtm)
+```
+
+We observed:
+
+- Sparsity = 100%, indicating 100% of values in matrix is zero. However, this is due to rounding up as calculated from (3110421323 - 3712687)/3110421323 \* 100% = 99.88%.
+
+- 83542 terms need to be consider, which includes terms that are rare. Including rare terms can leads to unreliable conclusion, overfitting on regression tree approach and false discovery.
+
+Next, we will remove sparse term from desc_dtm. Sparse value (= x) used means if term appears less than (x \* 100%) in all documents, we remove it. The trade-off is that keywords used in fewer than 10% of descriptions could not be assessed.
+
+```{R}
+desc_dtm_spar <- removeSparseTerms(desc_dtm, 0.90)
+
+inspect(desc_dtm_spar)
+```
+
+After sparsity value 0.9 is used, terms retained is reduced from 83542 to 220 terms.
+
+We then create a term_appearance binary table to indicate is a term is present in this particular text of not (yes = TRUE = 1, no = FALSE = 0).
+
+```{R}
+# get count > 0 and multiple by 1 to obtain a TRUE = 1 and FALSE = 0
+# 1 indicate the term is mentioned, 0 indicate the term is not mention in docs/description
+term_appearance <- as.data.frame(as.matrix(desc_dtm_spar) > 0) * 1
+
+term_appearance %>% head()
+```
+
+To prevent clashes of term with actual column name in dataset, we add a prefix (term\_) to all terms column name.
+
+```{R}
+names(term_appearance) <- paste0("term_", make.names(colnames(term_appearance)))
+
+# verify all column names are prefixed with "term_"
+term_appearance %>% head()
+```
+
+### Log transformation on price_num
+
+Before joining tables, we will observe the distribution of price_num to determine any transformation (eg: log transformation) is required. We will plot a histogram to visualise the distribution and compare it to a log version.
+
+```{R}
+ptv_10_perc_sample %>%
+  ggplot(aes(price_num)) +
+  geom_histogram(bins = 600) +
+  coord_cartesian(xlim = c(-1e6, 5e6)) +
+  scale_x_continuous(labels = scales::label_comma()) +
+  labs(
+    title = "Distribution of price_num",
+    x = "Price (AUD)",
+    y = "Count"
+  )
+```
+
+```{R}
+ptv_10_perc_sample %>%
+  ggplot(aes(log(price_num))) +
+  geom_histogram(bins = 60) +
+  coord_cartesian(xlim = c(10, 18)) +
+  scale_x_continuous(labels = scales::label_comma()) +
+  labs(
+    title = "Distribution of log(price_num)",
+    x = "Price (AUD)",
+    y = "Count"
+  )
+```
+
+From the 2 histogram plots above, we observed that raw price_num is right-skewed whereas after a log transformation, the distribution of log(price_num) is less skewed. This indicates that we will analyse keywords correlation against the log(price_num) rather than raw price_num because linear regression assumes symmetric and constant-variance residuals. A heavily right-skewed target lets extreme values the fit. The log transform reduces the influence of these extreme values and lets each keyword’s coefficient be read as an approximate percentage change in price rather than a fixed amount.
+
+### Joining tables by doc_id
+
+Join desc, term_appearance and ptv_10_perc_sample tables by doc_id into data frame called desc_df.
+
+```{R}
+# add doc_id (chr) to ptv_10_perc_sample needed for joining 
+ptv_10_perc_sample <- ptv_10_perc_sample %>%
+  mutate(
+    doc_id = as.character(row_number())
+  )
+
+# add doc_id (chr) to term_appearance needed for joining 
+term_appearance$doc_id <- rownames(term_appearance)
+
+# convert doc_id to (chr) format
+desc <- desc %>% mutate(
+  doc_id = as.character(doc_id)
+)
+
+# join desc, term_appearance and ptv_10_perc_sample tables by their common doc_id
+desc_df <- desc %>%
+  select(doc_id) %>%
+  inner_join(
+    ptv_10_perc_sample %>% 
+      select(
+        doc_id,
+        price_num
+      ) %>%
+      mutate(
+        # convert price_num to log_price
+        log_price = log(price_num)  
+      ),
+    by = "doc_id"
+  ) %>%
+  inner_join(
+    term_appearance,
+    by = "doc_id"
+  ) %>%
+  select(
+    -doc_id,
+    -price_num
+  )
+
+desc_df %>% head() 
+```
+
+### Regression tree
+
+To rank each keyword importance / influence on log(price), we use regression tree technique. Regression tree works by recursively splitting nodes and building a binary tree structure. It splits by keyword presence indicated by 0/1. Regression tree is suitable because we are analysing the importance variable from a continuous numerical value (log_price).
+
+```{R}
+# create regression fit
+desc_rp_fit <- rpart(log_price ~ ., data = desc_df)
+
+# create importance table
+var_importance <- tibble(
+  variable = names(desc_rp_fit$variable.importance),
+  importance = desc_rp_fit$variable.importance
+)
+
+var_importance
+```
+
+To interpret the result from var_importance table:
+
+- variable: Refer to the keyword (prefixed with "term\_" earlier)
+
+- importance: Refer to significance magnitude of the term on log(price). These values are relative and not percentage. A larger value means the variable does more to separate high-priced from low-priced listings.
+
+We further process var_importance by removing prefix "term\_" and generate an interpretable importance percentage.
+
+```{R}
+var_importance <- var_importance %>%
+  mutate(
+    variable = str_remove(variable, "^term_"),
+    imp_percentage = round(100 * importance / sum(importance), 1)
+  ) %>%
+  arrange(desc(imp_percentage))
+
+var_importance
+```
+
+The result of top 3 most important keywords in the description column that impact property prices are:
+
+1.  "zone" (importance percentage = 47.1%)
+2.  "residence" (importance percentage = 23.9%)
+3.  "dine" (importance percentage = 14.5%)
+
+Additionally, to visualise the importance of each keyword on log(price), we use a simple line plot of keywords against their variable.importance.
+
+```{R}
+var_importance %>%
+  mutate(
+    variable = fct_reorder(variable, importance)
+  ) %>%
+  ggplot(aes(x = importance, y = variable)) +
+  geom_segment(aes(x = 0, variable, xend = importance, yend = variable)) +
+  geom_point(colour = "red") +
+  labs(
+    title = "Keyword importance on property's pricing"
+  )
+```
+
+Therefore, the 3 most important keywords in the description column that impact property prices are "zone", "residence" and "dine".
+
+## 3. Owning property has long been considered a reliable way to build personal wealth. Which properties have experienced the highest price increases since their first sale? Please exclude properties where the time between the first and last sale exceeds five years. List the top five properties along with their address, capital gain, and the duration between the first and last sale.
+
+To analyse highest price increases since first sale, we continue using the ptv_price table created earlier with a price_num column with values of numerical value extracted from price column, midpoint from range-based price, descriptive-based price (eg: Contact agent) and NA excluded.
+
+We first observe if any property are sold more than once across the years. Since each property full address is unique, repeated sales on the same property should be recorded as separated transaction id, with its full address remains the same. We count the amount of times a full address is recorded, filter only those that appear at least twice (since we need at least 2 sales to investigate properties that have experienced the highest price increases since their first sale).
+
+```{R}
+ptv_price %>%
+  count(
+    full_address,
+    name = "n_sales"
+  ) %>%
+  filter(n_sales >= 2) %>%
+  arrange(desc(n_sales))
+```
+
+We observe that there are 3471 NA full address. Next, we check if counting by short address provide any different insights.
+
+```{R}
+ptv_price %>%
+  count(
+    short_address,
+    name = "n_sales"
+  ) %>%
+  filter(n_sales >= 2) %>%
+  arrange(desc(n_sales))
+```
+
+Similarly, 3471 of NA short address.
+
+Without full address and short address, we cannot determine the particular property. Although we may have suburb, state and postcode, but a single \<suburb\>\<state\>\<postcode\> may have several properties present in it. We do not have other values to impute the missing full address and short address. Hence, the 3471 cases with missing full address and short address will be dropped. Cases with NA sold_date and and price_num are also dropped as no other fields contains value to impute those missing values.
+
+We create a new table of ptv_sold_summary that:
+
+- Filters out NA full address, short address, sold_date and price_num.
+
+- Group by full_address and count each property sales throughout the years
+
+- Record first and last sold year, first and last sold price.
+
+```{R}
+ptv_sold_summary <- ptv_price %>%
+  filter(
+    # drop cases with NA full_address and short_address
+    !is.na(full_address),
+    !is.na(short_address),
+    # drop cases with NA sold_date and price_num
+    !is.na(sold_date),
+    !is.na(price_num)
+  ) %>% 
+  group_by(
+    full_address
+  ) %>%
+  summarise(
+    n_sales = n(),
+    first_date = min(sold_date),
+    last_date = max(sold_date),
+    first_year = year(first_date),
+    last_year = year(last_date),
+    first_price = price_num[which.min(sold_date)],
+    last_price = price_num[which.max(sold_date)],
+    .groups = "drop"
+  ) %>%
+  arrange(desc(n_sales))
+
+ptv_sold_summary %>% head()
+```
+
+Next, we create valid_sold table:
+
+- Property n_sales at least twice.
+
+- Compute capital_gain = last_price - first_price
+
+- Compute duration_year = last_date - first_date
+
+- duration_year is within 5 years.
+
+```{R}
+valid_sold <- ptv_sold_summary %>%
+  mutate(
+    capital_gain = last_price - first_price,
+    duration_year = as.numeric(last_date - first_date) / 365.25,
+    gap = as.period(interval(first_date, last_date), unit = "days"),
+    gap = as.period(interval(first_date, last_date)),
+    duration = paste0(gap@year, "y ", gap@month, "m ", gap@day, "d")
+  ) %>%
+  filter(
+    n_sales >= 2,
+    duration_year <= 5
+  ) %>%
+  select(
+    -gap,
+    -duration_year
+  )
+
+valid_sold %>% arrange(desc(capital_gain)) %>% head()
+```
+
+Extract the top 5 properties that experienced the highest price increases since their first sale.
+
+```{R}
+top_5_ptv <- valid_sold %>%
+  arrange(desc(capital_gain)) %>%
+  select(
+    full_address,
+    capital_gain,
+    duration
+  ) %>%
+  head(5) 
+
+top_5_ptv
+```
+
+From top_5_ptv, the top 5 properties that experienced the highest price increases since their first sale are:
+
+1.  4385 South Gippsland Highway, Caldermeade, Vic 3984; capital gain = 4290467295 AUD; duration = 10 months.
+2.  18 Keiller Avenue, Parkdale, Vic 3195; capital gain = 1009368000 AUD; duration = 3 years 7 months 3 days
+3.  27/1 Millar Road, Tullamarine, Vic 3043; capital gain = 319735000 AUD; duration = 3 years 8 months 4 days
+4.  9 Whernside Avenue, Toorak, Vic 3142; capital gain = 11000000 AUD; duration = 4 years 4 months 5 days
+5.  33 Grandview Grove, Prahran, Vic 3181; capital gain = 6680000 AUD; duration = 4 years 28 days
+
+An interesting observation amongst these top 5 properties: we use an original first price and last price instead of evaluating price increment in isolation over a fixed duration range. For example, 4385 South Gippsland Highway, Caldermeade, Vic 3984 experience the highest price increase across 10 months whereas 18 Keiller Avenue, Parkdale, Vic 3195 across a longer duration of 3 years 7 months 3 days. But, this does not disregard or signify that the property of Caldermeade which experience an exceptionally high increment of 4290467295 AUD over a short period of time is invalid as for the final reporting as we cannot verify any input error from the original dataset. Nevertherless, having further review to verify the validity of the top 3 (Caldermeade, Parkdale, Tullamarine) properties with higher capital gain compared to top 4, 5 (Toorak, Prahran) will provide a more precise and accurate reporting.
+
+## 4. Chris is looking for a renovated house to purchase. He wants the property to be close to a shopping centre, and since he has an 8-year-old son, proximity to a primary school is also important. He is looking for a home with 4 bedrooms and 2 bathrooms. Currently, he is considering six suburbs - Mulgrave, Vermont South, Doncaster East, Rowville, Glen Waverley, and Wheelers Hill and plans to choose one from this list. Please provide the predicted price for November 2026 of a house that meets the above criteria in each of the six suburbs, and display the predicted price alongside the corresponding suburb name. (Note: When you build the prediction model, please use only the provided dataset and the period it covers.)
+
+We continue using the ptv_price table created earlier with a price_num column with values of numerical value extracted from price column, midpoint from range-based price, descriptive-based price (eg: Contact agent) and NA excluded.
+
+Create a potential_property table that contain property that meets Chris's criteria of:
+
+- Property type is a house
+
+- 4 bedrooms
+
+- 2 bathrooms
+
+- Located in suburbs: Mulgrave, Vermont South, Doncaster East, Rowville, Glen Waverley, Wheelers Hill
+
+- Close to shopping center and primary school, determine from the appearance of "shopping center/centre/mall" and "primary school" keyword from description column.
+
+- Renovated property, determine from the appearance of "renovated, refurbish, updated, modernize, remodel" keyword from description column.
+
+Recalling previous log transformation on price_num field (in Q2: 2 histogram plots revealed raw price_num is right-skewed whereas after a log transformation, the distribution of log(price_num) is less skewed). Similarly, we will log transform price_num to reduces the influence of extreme values, making spread more even over time and bring residual closer to normal. After model prediction using log(price_num), we will return the real estimate of property price in November 2026 using exp().
+
+```{R}
+potential_property <- ptv_price %>%
+  filter(
+    # house type
+    property_type == "house",
+    # 4 bedrooms
+    bedrooms == 4,
+    # 2 bathrooms
+    bathrooms == 2,
+    # specific suburbs
+    suburb %in% c("Mulgrave", "Vermont South", "Doncaster East", "Rowville", "Glen Waverley", "Wheelers Hill"),
+    # shopping mall,  primary school, renovated mentions
+    str_detect(
+      description,
+      regex("shopping\\s*(center|centre|mall)", ignore_case = TRUE)
+    ),
+    str_detect(
+      description,
+      regex("primary\\s*school", ignore_case = TRUE)
+    ),
+    str_detect(
+      description,
+      regex("renovat|refurbish|updated|modernize|remodel", ignore_case = TRUE)
+    )
+  ) %>%
+  mutate(
+    sold_month = month(sold_date),
+    sold_year = year(sold_date),
+    # logarise price_num
+    log_price = log(price_num)
+  )
+
+potential_property %>% 
+  select(log_price, sold_year, sold_month, property_type, bedrooms, bathrooms, suburb, description, price_num) %>% 
+  arrange(suburb, sold_year, sold_month)
+```
+
+Next, we observe the trend in each suburb on how property prices progress across the years. Since log(price_num) and sold date are both continuous, a scatterplot is a suitable way to see how one changes with the other, faceting by suburb because revela any suburb distinguishable price trend. Thus, we use a scattered plot with each panel representing a suburb.
+
+```{R}
+ggplot(potential_property, aes(x = sold_date, y = log_price)) +
+  geom_point(alpha = 0.4) +
+  geom_smooth(method = "lm", se = FALSE, colour = "red") +
+  facet_wrap(~ suburb, scales = "free_y") +
+  labs(
+    title = "Sold price over time by suburb",
+    subtitle = "4 bedrooms, 2 bathrooms, renovated, near primary school and shopping center",
+    x = "Sold date", 
+    y = "log(price in AUD)"
+  ) +
+  theme_minimal()
+```
+
+We observed the scatterplot across all 6 suburbs are roughly linear without any off trend (eg: curve, parabola). Linear model is suitable as it also suits the question asking for a prediction for a defined type of house at a future date (November 2026), so a single-predictor trend model (log_price \~ sold_date) fits it.
+
+```{R}
+# set november 2026 as "2026-11-01" as x-factor used is Date format
+predict_date <- as.Date("2026-11-01")
+
+nov_2026_predictions <- potential_property %>%
+  group_by(
+    suburb
+  ) %>%
+  nest() %>%
+  mutate(
+    # using linear model: log_price ~ sold_date
+    model = map(data, ~ lm(log_price ~ sold_date, data = .x)),
+    # predict log price by applying the linear model
+    predicted_log_price = map_dbl(model, ~ predict(.x, newdata = data.frame(sold_date = predict_date))),
+    # convert back to price_num with exp() 
+    predicted_price = exp(predicted_log_price)
+  ) %>%
+  ungroup() %>%
+  select(
+    suburb, predicted_price, predicted_log_price
+  ) %>%
+  arrange(desc(predicted_log_price))
+
+nov_2026_predictions
+```
+
+The predicted price of property that matched Chris's criteria in November 2026 for each suburbs are:
+
+- Glen Waverley: 2295968 AUD
+
+- Vermont South: 2004586 AUD
+
+- Wheelers Hill: 1825780 AUD
+
+- Doncaster East: 1781702 AUD
+
+- Rowville: 1583112 AUD
+
+- Mulgrave: 1289867 AUD
+
+Additionally for visualisation, we use the predicted log(price), we plot a similar plot of "Sold price over year with November 2026 prediction" with an additional red dots signifying the log(predicted_price) to observe how it fits on the linear model used (log_price \~ sold_date).
+
+```{R}
+pred_points <- nov_2026_predictions %>%
+  mutate(
+    sold_date = predict_date,
+    log_price = predicted_log_price
+  )
+
+ggplot(potential_property, aes(x = sold_date, y = log_price)) +
+  geom_point(alpha = 0.4, colour = "grey30") +
+  geom_smooth(
+    method = "lm",
+    se = FALSE,
+    fullrange = TRUE,
+    colour = "blue"
+  ) +
+  geom_point(
+    data = pred_points,
+    colour = "red",
+    size = 3
+  ) +
+  facet_wrap(
+    ~ suburb,
+    scales = "free_y"
+  ) +
+  scale_y_continuous() +
+  labs(
+    title = "Sold price over year with November 2026 prediction",
+    subtitle = "red point = predicted log(price in Nov 2026)",
+    x = "Sold date", y = "log(price in AUD)"
+  ) +
+  theme_minimal() 
+```
+
+
+
+# Task C: Predictive Data Analysis Using R
+
+Load library
+
+```{R}
+library(tidyverse)
+library(lubridate)
+library(tm)
+library(tokenizers)
+library(textstem)
+library(wordcloud2)
+library(broom)
+library(rpart)
+library(rpart.plot)
+library(caret)
+library(randomForest)
+library(xgboost)
+```
+
+Load dataset
+
+```{R}
+# ind: Unique_ID, variables (word and their word count), unit_faculty, demographic_sex
+# dep: Unique_ID, label (relevant, irrelevant)
+
+# training
+forum_ind_train <- read_csv("Task_C_Datasets/forum_ind_train.csv")
+forum_dep_train <- read_csv("Task_C_Datasets/forum_dep_train.csv")
+
+# validation
+forum_ind_validation <- read_csv("Task_C_Datasets/forum_ind_validation.csv")
+forum_dep_validation <- read_csv("Task_C_Datasets/forum_dep_validation.csv")
+
+# testing
+forum_ind_test <- read_csv("Task_C_Datasets/forum_ind_test.csv")
+forum_dep_test <- read_csv("Task_C_Datasets/forum_dep_test.csv")
+```
+
+Observe each dataset.
+
+```{R}
+forum_ind_train %>% head()
+```
+
+```{R}
+forum_dep_train %>% head()
+```
+
+```{R}
+forum_ind_validation %>% head()
+```
+
+```{R}
+forum_dep_validation %>% head()
+```
+
+```{R}
+forum_ind_test %>% head()
+```
+
+```{R}
+forum_dep_test %>% head()
+```
+
+Observe unit faculty.
+
+```{R}
+forum_ind_train %>% count(unit_faculty)
+```
+
+```{R}
+forum_ind_validation %>% count(unit_faculty)
+```
+
+```{R}
+forum_ind_test %>% count(unit_faculty)
+```
+
+Observe demographic sex.
+
+```{R}
+forum_ind_train %>% count(demographic_sex)
+```
+
+```{R}
+forum_ind_validation %>% count(demographic_sex)
+```
+
+```{R}
+forum_ind_test %>% count(demographic_sex)
+```
+
+## 1. Please build multiple predictive models using methods you consider appropriate. Train each model on the training set and evaluate its performance on the validation set using the F1 score. Compare the models and identify which one performs best.
+
+### Dataset analysis
+
+The 6 dataset loaded previouslyc consist of 3 splits x 2 file types.
+
+The 2 file types:
+
+1.  independent (ind): Predictors. Contains fields of Unique_ID, LIWC columns, unit_faculty and demographic_sex.
+2.  dependent (dep): Unique_ID and label (Content-relevant or Content-irrelevant)
+
+Each split need both files (dep and ind) joined by Unique_ID to give a complete labelled dataset. The 3 splits are:
+
+1.  Training: Used to teach models. Also be used at EDA stage, data cleaning, preprocessing parameter, fitting models.
+
+2.  Validation: Used to score and compare models. After training a model, we feed the model independent value from validation set to get prediction, then compare it to dependent labels to compute F1 and confusion matrix. This allows us to decide which model is best.
+
+3.  Test: Used to generate final predictions. After selecting the best model, we feed the model with independent value of test set. Realise that dependent value of test set does not contain any value as it is meant to just save the computed prediction from the chosen best model.
+
+### Candidate predictive models and appropriation reasoning
+
+The data is labelled and the target is categorical, hence we will use a supervised classification to build the predictive model. The predictors are LIWC columns. Tree-based methods are suitable model candidates because:
+
+- Simple, no scaling or transformation required since splits depend only on rank order tolerate correlated predictors capture non-linear effects.
+
+- Interactions handle categorical predictors
+
+### Overall approach
+
+To determine the best predictive model, we will structure the work as such:
+
+1.  Join tables to obtain combined train and validation dataset.
+
+2.  Create 3 tree models: single classification tree, random forest and XGBoost.
+
+3.  For each model, we will create it, train it using combined train dataset, evaluate its F1 score by putting combined validation dataset to a confusion matrix.
+
+4.  Although F1 can be manually calculated using formula:
+
+    F1 = 2 \* (precision \* recall)/(precision + recall); precision = TP / (TP + FP); recall = TP / (TP + FN)
+
+    we will be using ConfusionMatrix build in F1 to obtain the F1 score.
+
+5.  F1 and confusion matrix are used to evaluate the performance of each machine learning classification model. F1 is the final metric to be evaluated to determine which model is the best as F1 is defined as "out of all positive predictions the model made, how many were actually correct?"
+
+### Joining tables
+
+Train and validation dataset are joined by Unique_ID field.
+
+```{R}
+# helper function to join tables by Unique_ID
+prep <- function(dep, ind) {
+  dep %>%
+    inner_join(
+      ind, 
+      by = "Unique_ID"
+    ) %>%
+    mutate(
+      across(-c(label, unit_faculty, demographic_sex), as.numeric),
+      label = factor(label),
+      unit_faculty = factor(unit_faculty),
+      demographic_sex = factor(demographic_sex)
+    )
+}
+
+train_combined <- prep(forum_dep_train, forum_ind_train)
+valid_combined <- prep(forum_dep_validation, forum_ind_validation)
+```
+
+Check for NA cases in train_combined.
+
+```{R}
+train_combined %>% filter(if_any(everything(), is.na)) 
+```
+
+We observe case wtth Unique_ID 60 have NA across all LIWC columns. Additionally, there are 4 rows that are NA across all fields. We will drop of these 5 cases as NA appears across almost all fields and cannot be imputed since we dont have the original text context. Another 2 cases with Unique_ID 129, 258 has NA appearing in demographic_sex and will also be dropped as an NA field complicates predictive model (eg: random forrest using RandomForrest from randomForrest library) and dropping only 2 cases will not have significant impact on trained model.
+
+```{R}
+train_combined <- train_combined %>% filter(
+  Unique_ID != 60,
+  !is.na(Unique_ID),
+  Unique_ID != 129,
+  Unique_ID != 258,
+)
+
+train_combined %>% filter(if_any(everything(), is.na)) 
+```
+
+Check for NA cases in train_combined.
+
+```{R}
+valid_combined %>% filter(if_any(everything(), is.na))
+```
+
+We observed cases with Unique_ID 4076, 816 and 480 has NA appearing in demographic_sex and will also be dropped as an NA field complicates predictive model (eg: XBoost from xgbosst library) and dropping only 3 cases will not have significant impact on trained.
+
+```{R}
+valid_combined <- valid_combined %>% filter(
+  Unique_ID != 4076,
+  Unique_ID != 816,
+  Unique_ID != 480,
+)
+
+valid_combined %>% filter(if_any(everything(), is.na)) 
+```
+
+Use identical factor levels across sets for consistency.
+
+```{R}
+valid_combined$unit_faculty <- factor(
+  valid_combined$unit_faculty,
+  levels = levels(train_combined$unit_faculty)
+)
+
+valid_combined$demographic_sex <- factor(
+  valid_combined$demographic_sex,
+  levels = levels(train_combined$demographic_sex)
+)
+```
+
+### Model 1: Classification Tree
+
+Classification tree recursively splits on the featurethat gives the purest child nodes (Gini). A post follows the splits to a leaf and the leaf’s majority class is the prediction.
+
+```{R}
+# seed for reproducibility
+set.seed(5145)
+
+rp_fit_gini <- rpart(
+  label ~ ., 
+  data = train_combined, 
+  parms = list(split = "gini"),
+  # grows a deliberately large tree (cp = 0) 
+  # runs 10-fold CV internally (xval = 10)
+  control = rpart.control(cp = 0, minsplit = 20, xval = 10)
+)
+
+rp_fit_gini
+```
+
+Generate prediction with validation data and confusion matrix.
+
+```{R}
+pred_ct_gini <- predict(rp_fit_gini, valid_combined, type = "class")
+
+cm_ct_gini <- confusionMatrix(
+  pred_ct_gini,
+  valid_combined$label,
+  positive = "Content-relevant",
+  mode = "prec_recall"
+)
+```
+
+```{R}
+cm_ct_gini
+```
+
+```{R}
+cm_ct_gini$byClass["F1"]
+```
+
+Based on the confusion matrix, the total cases correctly classified is 116 + 340 = 456, with an accuracy of 82.6%, where as the F1 score is 0.876.
+
+### Model 2: Ensemble (bagging) using Random Forrest
+
+Random forest builds many deep trees, each on a bootstrap sample of the rows and a random subset of features at every split. Then, let the trees vote. Votes will be averaged by related trees to cuts the variance that makes a single tree unstable.
+
+```{R}
+# seed for reproducibility
+set.seed(5145)
+
+# rename the columns to syntactic names
+names(train_combined) <- make.names(names(train_combined))
+names(valid_combined) <- make.names(names(valid_combined))
+
+# random forest model with 500 trees
+rf_base <- randomForest(
+  label ~ .,
+  data = train_combined,
+  ntree = 500,
+  importance = TRUE
+)
+
+rf_base
+```
+
+Generate prediction with validation data and confusion matrix.
+
+```{R}
+pred_rf <- predict(
+  rf_base,
+  valid_combined
+)
+
+rf_cm <- confusionMatrix(
+  pred_rf,
+  valid_combined$label,
+  positive = "Content-relevant"
+)
+```
+
+```{R}
+rf_cm
+```
+
+```{R}
+rf_cm$byClass["F1"]
+```
+
+Based on the confusion matrix, the total cases correctly classified is 131 + 362 = 493, with an accuracy of 89.3%, whereas the F1 score is 0.925.
+
+### Model 3: Ensemble (boosting) using XGBoost
+
+XGBoost builds shallow trees one after another. Each new tree is fitted to the errors of the ensemble so far and its contribution is shrunk by a learning rate. It needs a numeric matrix and a 0/1 numeric label, differing from rpart (classification tree) and randomForest.
+
+```{R}
+# remove Unique_ID for xgboost (frop intercept column)
+xgb_x_train <- model.matrix(label ~ . - 1, data = train_combined)
+xgb_x_valid <- model.matrix(label ~ . - 1, data = valid_combined)
+
+# label = 1 if content-relevant, label = 0 if content-orrelevant
+xgb_y_train <- as.numeric(train_combined$label == "Content-relevant")
+xgb_y_valid <- as.numeric(valid_combined$label == "Content-relevant")
+
+```
+
+Fit a baseline XGB model.
+
+```{R}
+dtrain <- xgb.DMatrix(
+  data = xgb_x_train,
+  label = xgb_y_train
+)
+
+dvalid <- xgb.DMatrix(
+  data = xgb_x_valid,
+  label = xgb_y_valid
+)
+```
+
+Define the params (objective, evaluation matric, learning rate, depth) of the XGB model.
+
+```{R}
+params <- list(
+  objective = "binary:logistic",
+  eval_metric = "logloss",
+  eta = 0.1,
+  max_depth = 4,
+  subsample = 0.8,
+  colsample_bytree = 0.8
+)
+```
+
+Build the XGB model.
+
+```{R}
+# seed for reproducibility
+set.seed(5145)
+
+xgb_base <- xgb.train(
+  params = params,
+  data = dtrain,
+  nrounds = 500
+)
+```
+
+Generate prediction with validation data and confusion matrix.
+
+```{R}
+probability_xgb <- predict(
+  xgb_base,
+  dvalid
+)
+
+# data and reference for confusionMatrix must be factors of the same levels 
+pred_xgb <- factor(
+  ifelse(
+    probability_xgb >= 0.5,
+    "Content-relevant",
+    "Content-irrelevant"
+  ),
+  levels = levels(valid_combined$label)
+)
+
+xgb_cm <- confusionMatrix(
+  pred_xgb,
+  valid_combined$label,
+  positive = "Content-relevant"
+)
+```
+
+```{R}
+xgb_cm
+```
+
+```{R}
+xgb_cm$byClass["F1"]
+```
+
+Based on the confusion matrix, the total cases correctly classified is 130 + 361 = 491, with an accuracy of 89%, whereas the F1 score is 0.922.
+
+### Model performance evaluation on the validation set using the F1 score
+
+Across all 3 models:
+
+1.  Single classification tree: F1 score = 0.876
+2.  Random forest: F1 score = 0.925
+3.  XGBoost: F1 score = 0.922
+
+A single classification tree was fitted first as an interpretable baseline whose rules can be read directly, and to establish how much signal the LIWC features carry (F1 = 0.876). Because single trees are high-variance, a random forest was added to test whether averaging decorrelated trees improves stability (F1 = 0.925). Lastly, XGBoost was added to test whether sequentially correcting errors reduces bias (F1 = 0.922). All 3 are scale-invariant and handle skewed, correlated LIWC predictors without transformation. The ensembles’ gain over the single tree supports variance as the main limitation of one tree, while the negligible gap between random forest and XGBoost suggests the data does not need the extra flexibility of boosting. Therefore, random forest (model 2) is the best performing model.
+
+## 2. Please Your model's performance depends on how complex you allow it to be. Investigate this relationship for your chosen model and present a visualisation as evidence that lets you reason about underfitting, overfitting, and the bias-variance trade-off. Use what you find to justify the complexity of your final model.
+
+To investigate chosen model (random forest) complexity, we first note that:
+
+- Increasing number of trees (ntree) doesn’t overfit a model, hence is not a sole measure to a model's complexity
+
+- The parameters that control complexity are those that change how flexible each tree is. Maximum terminal nodes per tree (manipulated via maxnodes variable) is a good complexity axis. A smaller maxnodes give shallower tree, whereas a larger maxnodes give larger deeper tree (high variance tree).
+
+To detect overfittting/underfitting and rationalising overall complexity of random forest model, we analyse the relationship between misclassification error against maxnodes (log scaled when ploted on line plot) for all 3 datasets: training, validation and OOB (out-of-bag). Training and validation data are from combined dataset produced in Q1, whereas OOB are built-in way for a random forest to estimate its own test error without needing a separate validation set. In short, OOB will:
+
+1.  Find all the trees that did not see that row during training.
+2.  Let only those trees vote on its class.
+3.  Compare the majority vote to the true label.
+
+```{R}
+# seed for reproducibility
+set.seed(5145)
+
+# maxnodes log scaled
+node_grid <- c(2, 4, 8, 16, 32, 64, 128, 256, 512)
+
+results <- lapply(node_grid, function(mn) {
+  rf <- randomForest(
+    label ~ .,
+    data     = train_combined,
+    ntree    = 500,
+    maxnodes = mn
+  )
+  
+  train_pred <- predict(rf, train_combined)
+  valid_pred <- predict(rf, valid_combined)
+  
+  data.frame(
+    maxnodes  = mn,
+    # training error
+    train_err = mean(train_pred != train_combined$label),
+    # out-of-bag error
+    oob_err   = rf$err.rate[500, "OOB"],
+    # validatino error
+    valid_err = mean(valid_pred != valid_combined$label)
+  )
+}) %>% bind_rows()
+
+# long format for plotting
+plot_df <- results %>%
+  pivot_longer(
+    cols = c(
+      train_err, 
+      oob_err, 
+      valid_err
+    ),
+    names_to = "set", 
+    values_to = "error"
+  ) %>%
+  mutate(
+    set = recode(
+      set,
+      train_err = "Training error",
+      oob_err   = "OOB error",
+      valid_err = "Validation error"
+    )
+  )
+```
+
+Plot to visualise misclassification error agasint model complexity (represented by maxnodes) for all 3 data: training, validation, OOB.
+
+```{R}
+ggplot(plot_df, aes(x = maxnodes, y = error, colour = set, linetype = set)) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 2) +
+  scale_x_log10(breaks = node_grid) +
+  labs(
+    title = "Random Forest: error vs model complexity (maxnodes)",
+    x = "Max terminal nodes per tree",
+    y = "Misclassification error",
+    colour = NULL, 
+    linetype = NULL
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "bottom")
+```
+
+Observing from the plot:
+
+1.  At low maxnodes values (2-8), training, validation and OOB errors are relatively high (0.15 and above). This indicates the model with maxnodes 2-8 are highly underfitting, meaning they have high bias. Tree are too simple to capture LIWC patterns and influence on label.
+2.  At the middle section (maxnodes = 8-128), all training, validation and OOB errors falls with training error falling at highest rate showing the steepest gradient. This indicates bias has been reduced and variance is still controlled. Ideally, this section has a good balance between underfitting and overfitting.
+3.  At high maxnodes (128+), validation and OOB error are still flat and stable. However, training error continue dropping significantly until it reaches almost 0. This indicate the model overfitting on individual tree. The contrast gap between training and validation error is the variance and signify how model is only well-performed due to trained data and not when it comes to new external data.
+
+The insight highlights the complexity of chosen model (random forest):
+
+- Training error is misleading for random forests. Grown trees memorise the training data, so training error will be near 0 even when the model generalises fine.
+
+- Random forests plateau at certain point. For example, OOB and validation error falttens at middle maxnodes range because averaging many trees suppresses variance. This is a bias-variance trade-off as we see how bagging (combining several tree to produce random forrest instead of using a single classification tree) lets us use deep, low-bias trees without paying the full variance penalty.
+
+## 3. Please notice that the groundtruth label values in the file “forum_dep_test.csv” are withheld for now, but they will be shared after the due date of this assignment. Here, your task is to use the best-performing model constructed from Question 1 to predict the label of the posts contained in the file "forum_dep_test.csv”. You need to populate your prediction results (i.e., the predicted label values) into the file “forum_dep_test.csv” and upload it to Moodle to measure the overall performance of your model. Please ensure the number of columns and rows and column names remains the same as in the original file (in the file “forum_dep_test.csv”), and only fill in the prediction results in the 'label' column.
+
+Load test dataset.
+
+```{R}
+forum_ind_test <- read_csv("Task_C_Datasets/forum_ind_test.csv", na = character(),
+                     col_types = cols(.default = "c"))
+forum_dep_test <- read_csv("Task_C_Datasets/forum_dep_test.csv", na = character(),
+                     col_types = cols(.default = "c"))
+```
+
+Make the test features match train_combined. (same approach in Q1: Model 2 section)
+
+```{R}
+feat <- ind_test 
+names(feat) <- make.names(names(feat))   
+cat_cols <- c("unit_faculty", "demographic_sex")
+num_cols <- setdiff(names(feat), cat_cols)
+
+feat <- feat %>% 
+  mutate(
+    across(all_of(num_cols),
+    ~ suppressWarnings(as.numeric(.x)))
+  )
+```
+
+Categorical columns: blanks / "NA" into NA, then fill with the training mode
+
+```{R}
+# helper function
+mode_level <- function(x) names(which.max(table(x)))
+
+for (col in num_cols) {
+  feat[[col]][is.na(feat[[col]])] <- median(train_combined[[col]], na.rm = TRUE)
+}
+
+for (col in cat_cols) {
+  feat[[col]][feat[[col]] %in% c("", "NA")] <- NA
+  feat[[col]][is.na(feat[[col]])] <- mode_level(train_combined[[col]])
+  feat[[col]] <- factor(feat[[col]], levels = levels(train_combined[[col]]))
+}
+```
+
+Verify nothing is left missing and nothing fell outside the training levels.
+
+```{R}
+stopifnot(sum(is.na(feat)) == 0)
+```
+
+Predict using chosen model (rf_base model).
+
+```{R}
+m1_pred_test <- predict(rf_base, newdata = feat)
+# for checking
+m1_pred_test %>% head(20)
+```
+
+Generate CSV.
+
+```{R}
+# dependent test as base, with empty label
+submission <- dep_test
+# add in te label from generated m1_pred_test
+submission$label <- as.character(m1_pred_test)
+
+# check if submission has 556 rows (same as original dependent test csv), identical name, has required fields for assessment (Unique_ID, label), all labels are either "Content-relevant" or "Content-irrelevent" only.
+stopifnot(
+  nrow(submission) == 556,
+  identical(names(submission), c("Unique_ID", "label")),
+  all(submission$label %in% c("Content-relevant", "Content-irrelevant"))
+)
+# summarise count for relevent and irrelevent
+table(submission$label)
+```
+
+```{R}
+# generate and name the final csv
+write_csv(submission, "Lim_34476245_forum_label_test.csv")
+```
