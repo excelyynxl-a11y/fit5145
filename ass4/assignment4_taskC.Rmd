@@ -503,10 +503,80 @@ The insight highlights the complexity of chosen model (random forest):
 
 ## 3. Please notice that the groundtruth label values in the file “forum_dep_test.csv” are withheld for now, but they will be shared after the due date of this assignment. Here, your task is to use the best-performing model constructed from Question 1 to predict the label of the posts contained in the file "forum_dep_test.csv”. You need to populate your prediction results (i.e., the predicted label values) into the file “forum_dep_test.csv” and upload it to Moodle to measure the overall performance of your model. Please ensure the number of columns and rows and column names remains the same as in the original file (in the file “forum_dep_test.csv”), and only fill in the prediction results in the 'label' column.
 
+Load test dataset.
+
 ```{R}
-test_combined <- prep(forum_dep_test, forum_ind_test)
-names(test_combined) <- make.names(names(test_combined))
+forum_ind_test <- read_csv("Task_C_Datasets/forum_ind_test.csv", na = character(),
+                     col_types = cols(.default = "c"))
+forum_dep_test <- read_csv("Task_C_Datasets/forum_dep_test.csv", na = character(),
+                     col_types = cols(.default = "c"))
+```
 
-pred_test <- predict(rf_base, test_combined)
+Make the test features match train_combined. (same approach in Q1: Model 2 section)
 
+```{R}
+feat <- ind_test 
+names(feat) <- make.names(names(feat))   
+cat_cols <- c("unit_faculty", "demographic_sex")
+num_cols <- setdiff(names(feat), cat_cols)
+
+feat <- feat %>% 
+  mutate(
+    across(all_of(num_cols),
+    ~ suppressWarnings(as.numeric(.x)))
+  )
+```
+
+Categorical columns: blanks / "NA" into NA, then fill with the training mode
+
+```{R}
+# helper function
+mode_level <- function(x) names(which.max(table(x)))
+
+for (col in num_cols) {
+  feat[[col]][is.na(feat[[col]])] <- median(train_combined[[col]], na.rm = TRUE)
+}
+
+for (col in cat_cols) {
+  feat[[col]][feat[[col]] %in% c("", "NA")] <- NA
+  feat[[col]][is.na(feat[[col]])] <- mode_level(train_combined[[col]])
+  feat[[col]] <- factor(feat[[col]], levels = levels(train_combined[[col]]))
+}
+```
+
+Verify nothing is left missing and nothing fell outside the training levels.
+
+```{R}
+stopifnot(sum(is.na(feat)) == 0)
+```
+
+Predict using chosen model (rf_base model).
+
+```{R}
+m1_pred_test <- predict(rf_base, newdata = feat)
+# for checking
+m1_pred_test %>% head(20)
+```
+
+Generate CSV.
+
+```{R}
+# dependent test as base, with empty label
+submission <- dep_test
+# add in te label from generated m1_pred_test
+submission$label <- as.character(m1_pred_test)
+
+# check if submission has 556 rows (same as original dependent test csv), identical name, has required fields for assessment (Unique_ID, label), all labels are either "Content-relevant" or "Content-irrelevent" only.
+stopifnot(
+  nrow(submission) == 556,
+  identical(names(submission), c("Unique_ID", "label")),
+  all(submission$label %in% c("Content-relevant", "Content-irrelevant"))
+)
+# summarise count for relevent and irrelevent
+table(submission$label)
+```
+
+```{R}
+# generate and name the final csv
+write_csv(submission, "Lim_34476245_forum_label_test.csv")
 ```
