@@ -502,3 +502,11 @@ The insight highlights the complexity of chosen model (random forest):
 - Random forests plateau at certain point. For example, OOB and validation error falttens at middle maxnodes range because averaging many trees suppresses variance. This is a bias-variance trade-off as we see how bagging (combining several tree to produce random forrest instead of using a single classification tree) lets us use deep, low-bias trees without paying the full variance penalty.
 
 ## 3. Please notice that the groundtruth label values in the file “forum_dep_test.csv” are withheld for now, but they will be shared after the due date of this assignment. Here, your task is to use the best-performing model constructed from Question 1 to predict the label of the posts contained in the file "forum_dep_test.csv”. You need to populate your prediction results (i.e., the predicted label values) into the file “forum_dep_test.csv” and upload it to Moodle to measure the overall performance of your model. Please ensure the number of columns and rows and column names remains the same as in the original file (in the file “forum_dep_test.csv”), and only fill in the prediction results in the 'label' column.
+
+```{R}
+test_combined <- prep(forum_dep_test, forum_ind_test)
+names(test_combined) <- make.names(names(test_combined))
+
+pred_test <- predict(rf_base, test_combined)
+
+```
