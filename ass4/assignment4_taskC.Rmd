@@ -445,7 +445,7 @@ results <- lapply(node_grid, function(mn) {
     train_err = mean(train_pred != train_combined$label),
     # out-of-bag error
     oob_err   = rf$err.rate[500, "OOB"],
-    # validatino error
+    # validation error
     valid_err = mean(valid_pred != valid_combined$label)
   )
 }) %>% bind_rows()
@@ -515,7 +515,7 @@ forum_dep_test <- read_csv("Task_C_Datasets/forum_dep_test.csv", na = character(
 Make the test features match train_combined. (same approach in Q1: Model 2 section)
 
 ```{R}
-feat <- ind_test 
+feat <- forum_ind_test 
 names(feat) <- make.names(names(feat))   
 cat_cols <- c("unit_faculty", "demographic_sex")
 num_cols <- setdiff(names(feat), cat_cols)
@@ -562,7 +562,7 @@ Generate CSV.
 
 ```{R}
 # dependent test as base, with empty label
-submission <- dep_test
+submission <- forum_dep_test
 # add in te label from generated m1_pred_test
 submission$label <- as.character(m1_pred_test)
 
